@@ -1,206 +1,91 @@
-# Bleeding Edge Data Stack — Monorepo Structure (Revised)
+# Monorepo Structure
 
-> **Tooling:** uv workspaces · just · ruff · pyright · pre-commit · GitHub Actions
-
-Previous version used `pip`, `Makefile`, flat `pyproject.toml`. Here's the actually modern approach.
+**Stack:** uv workspaces · just · ruff · pyright · sqlfluff · pre-commit · GitHub Actions · Dagster+ Serverless
 
 ---
 
-## What changed and why
-
-| Before (generic) | After (bleeding edge) | Why |
-|---|---|---|
-| `pip install` | `uv sync` | 10-100× faster, single lockfile, workspace support |
-| `pyproject.toml` (flat) | uv workspaces (multi-package) | Each layer is an isolated package with its own deps |
-| `Makefile` | `justfile` | Modern syntax, arguments, no tab sensitivity |
-| `ruff` (lint only) | `ruff` + `pyright` | Type checking catches bugs before runtime |
-| `requirements.txt` | `uv.lock` | Single lockfile across all workspace members |
-| `pip install -e ".[dev]"` | `uv sync --all-packages` | One command installs everything |
-| Docker for local Postgres | `uv run` + DuckDB local | No Docker needed for local dev |
-
----
-
-## Repository Structure
+## Layout
 
 ```
-data-platform/
-│
-├── pyproject.toml                     # Root workspace definition
-├── uv.lock                            # Single lockfile (auto-generated, committed)
-├── .python-version                    # 3.13 (managed by uv)
-├── justfile                           # Task runner (replaces Makefile)
-├── .pre-commit-config.yaml            # Pre-commit hooks: ruff + pyright
-├── .env.example                       # Template for secrets
+xdata/
+├── pyproject.toml              # root workspace + dev tooling config
+├── uv.lock                     # single lockfile across all members
+├── .python-version             # 3.13
+├── justfile
+├── .pre-commit-config.yaml
+├── .env.example
+├── .gitignore
+├── CLAUDE.md
 ├── README.md
 │
-├── .github/
-│   └── workflows/
-│       ├── ci.yml                     # PR: ruff + pyright + tests + sqlmesh plan
-│       ├── deploy.yml                 # Merge to main: sqlmesh apply + dagster deploy
-│       └── quality.yml                # Scheduled: full soda scan
+├── .github/workflows/
+│   ├── ci.yml                  # PR: lint + typecheck + test + sqlmesh plan + soda
+│   ├── deploy.yml              # main: sqlmesh apply + dagster-plus deploy
+│   └── branch-deployment.yml   # PR: Dagster+ branch deployment
 │
+├── shared/                     # config, connections, logging, types
+│   ├── src/xdata_shared/
+│   └── tests/
 │
-│── packages/                          # ── SHARED LIBRARIES ──
-│   │
-│   └── shared/                        # Shared utilities across all layers
-│       ├── pyproject.toml
-│       └── src/
-│           └── shared/
-│               ├── __init__.py
-│               ├── config.py          # Pydantic settings: S3, RDS, DuckDB config
-│               ├── connections.py     # DuckDB connection factory
-│               ├── logging.py         # Structured logging (structlog)
-│               └── types.py           # Shared type definitions
+├── ingestion/                  # dlt pipelines
+│   ├── src/xdata_ingestion/««
+│   │   ├── sources/            # one file per source (stripe, hubspot, …)
+│   │   ├── schemas/            # <source>.yaml — dlt schema overrides
+│   │   └── helpers/
+│   └── tests/
 │
-│
-├── ingestion/                         # ── LAYER 1: dlt pipelines ──
-│   ├── pyproject.toml                 # deps: dlt[duckdb], shared
-│   └── src/
-│       └── ingestion/
-│           ├── __init__.py
-│           ├── sources/
-│           │   ├── __init__.py
-│           │   ├── stripe.py
-│           │   ├── hubspot.py
-│           │   ├── postgres_cdc.py    # Sling wrapper
-│           │   └── google_sheets.py
-│           ├── helpers/
-│           │   ├── __init__.py
-│           │   ├── pagination.py
-│           │   └── rate_limiting.py
-│           └── schemas/
-│               ├── stripe.schema.yaml
-│               └── hubspot.schema.yaml
-│
-│
-├── transform/                         # ── LAYER 2: SQLMesh project ──
-│   ├── pyproject.toml                 # deps: sqlmesh[duckdb], shared
-│   ├── config.yaml                    # SQLMesh config
+├── transform/                  # SQLMesh project — non-packaged workspace member (deps only, no src/)
+│   ├── config.yaml
 │   ├── models/
 │   │   ├── staging/
-│   │   │   ├── stg_stripe__payments.sql
-│   │   │   ├── stg_stripe__customers.sql
-│   │   │   ├── stg_hubspot__contacts.sql
-│   │   │   └── stg_hubspot__deals.sql
 │   │   ├── intermediate/
-│   │   │   ├── int_payments_enriched.sql
-│   │   │   └── int_contacts_with_deals.sql
 │   │   └── marts/
-│   │       ├── fct_revenue.sql
-│   │       ├── fct_deals.sql
-│   │       ├── dim_customers.sql
-│   │       └── dim_products.sql
 │   ├── audits/
-│   │   ├── assert_revenue_positive.sql
-│   │   ├── assert_no_orphan_payments.sql
-│   │   └── assert_customer_email_valid.sql
 │   ├── macros/
-│   │   ├── cents_to_dollars.sql
-│   │   ├── safe_divide.sql
-│   │   └── date_spine.sql
 │   ├── seeds/
-│   │   ├── country_codes.csv
-│   │   └── currency_exchange_rates.csv
-│   └── tests/
-│       └── test_fct_revenue.yaml
+│   └── tests/                  # SQLMesh tests
 │
-│
-├── quality/                           # ── LAYER 3: Soda checks ──
-│   ├── pyproject.toml                 # deps: soda-core-duckdb, shared
-│   ├── soda_config.yml
+├── quality/                    # Soda
+│   ├── soda_config.yaml
 │   ├── checks/
 │   │   ├── raw/
-│   │   │   ├── orders.yml
-│   │   │   └── customers.yml
 │   │   ├── staging/
-│   │   │   └── stg_stripe__payments.yml
 │   │   └── marts/
-│   │       ├── fct_revenue.yml
-│   │       └── dim_customers.yml
-│   └── src/
-│       └── quality/
-│           ├── __init__.py
-│           └── runner.py              # Programmatic Soda scan runner
+│   ├── src/xdata_quality/      # programmatic Soda runner
+│   └── tests/
 │
+├── orchestration/              # Dagster user code
+│   ├── dagster_cloud.yaml      # Dagster+ code-location definition
+│   ├── src/xdata_orchestration/
+│   │   ├── definitions.py
+│   │   ├── assets/             # ingestion.py, transformation.py, quality.py
+│   │   ├── resources.py
+│   │   ├── schedules.py
+│   │   ├── sensors.py
+│   │   └── partitions.py
+│   └── tests/
 │
-├── orchestration/                     # ── LAYER 4: Dagster ──
-│   ├── pyproject.toml                 # deps: dagster, dagster-dlt, dagster-sqlmesh, shared
-│   └── src/
-│       └── orchestration/
-│           ├── __init__.py
-│           ├── definitions.py         # Main Dagster entry point
-│           ├── assets/
-│           │   ├── __init__.py
-│           │   ├── ingestion.py       # dlt assets
-│           │   ├── transformation.py  # SQLMesh assets
-│           │   └── quality.py         # Soda assets
-│           ├── resources.py           # DuckDB conn, S3, secrets
-│           ├── schedules.py
-│           ├── sensors.py
-│           └── partitions.py
+├── semantic/                   # Cube.dev (Node — outside uv workspace)
+│   ├── package.json
+│   ├── cube.js
+│   └── schema/*.js
 │
+├── infra/                      # see docs/opentofu_project_guide.md
+│   └── opentofu/
+│       ├── modules/app/
+│       ├── live/
+│       └── config/
 │
-├── semantic/                          # ── LAYER 5: Cube.dev (JS — separate from Python workspace) ──
-│   ├── package.json                   # Node deps (Cube is JS-based)
-│   ├── cube.js                        # Cube config
-│   ├── schema/
-│   │   ├── Revenue.js
-│   │   ├── Customers.js
-│   │   ├── Deals.js
-│   │   └── Products.js
-│   └── Dockerfile
-│
-│
-├── infra/                             # ── INFRASTRUCTURE ──
-│   ├── opentofu/
-│   │   ├── modules/
-│   │   │   └── app/
-│   │   │       ├── variables.tf      # All input variables
-│   │   │       ├── outputs.tf        # All outputs
-│   │   │       ├── locals.tf         # Naming conventions, tags
-│   │   │       ├── s3.tf             # Data lake bucket
-│   │   │       ├── rds.tf            # PostgreSQL for DuckLake catalog
-│   │   │       ├── iam.tf            # Roles and policies
-│   │   │       └── tests/
-│   │   │           └── basic.tftest.hcl
-│   │   ├── live/
-│   │   │   ├── main.tf               # Single module call
-│   │   │   ├── variables.tf          # Pass-through variable declarations
-│   │   │   ├── providers.tf          # AWS provider + assume_role
-│   │   │   └── backend.tf            # Empty S3 backend (filled at init)
-│   │   └── config/
-│   │       ├── dev.tfvars
-│   │       ├── int.tfvars
-│   │       ├── prod.tfvars
-│   │       ├── dev.s3.tfbackend
-│   │       ├── int.s3.tfbackend
-│   │       └── prod.s3.tfbackend
-│   └── docker/
-│       ├── dagster.Dockerfile         # User code image for Dagster Cloud
-│       └── docker-compose.yml         # Local dev: Postgres only (DuckLake catalog)
-│
-│
-├── scripts/                           # ── UTILITY SCRIPTS (with inline uv metadata) ──
-│   ├── setup_ducklake.py              # /// script | dependencies = ["duckdb"] ///
-│   ├── seed_dev_data.py               # /// script | dependencies = ["duckdb", "polars"] ///
-│   ├── run_backfill.py
-│   ├── export_to_iceberg.py           # Escape hatch: DuckLake → Iceberg
-│   └── health_check.py
-│
+├── scripts/                    # PEP 723 inline-metadata one-offs (ad-hoc backfills, migrations) — empty until needed
 │
 └── docs/
-    ├── architecture.md
-    ├── runbook.md
-    ├── onboarding.md
-    ├── data-dictionary.md
+    ├── data_stack.md
+    ├── monorepo_structure.md
+    ├── opentofu_project_guide.md
     └── adr/
-        ├── 001-ducklake-over-iceberg.md
-        ├── 002-sqlmesh-over-dbt.md
-        ├── 003-duckdb-over-athena.md
-        ├── 004-dagster-over-airflow.md
-        ├── 005-uv-over-poetry.md
-        └── 006-just-over-make.md
 ```
+
+Dependency graph: `orchestration → {ingestion, transform, quality} → shared`. `semantic/` is JS and excluded from the uv workspace. `scripts/` declare deps inline and are not workspace members.
 
 ---
 
@@ -208,263 +93,123 @@ data-platform/
 
 ```toml
 [project]
-name = "data-platform"
+name = "xdata"
 version = "0.1.0"
-description = "Bleeding edge data engineering platform"
 requires-python = ">=3.13"
-# Root has no direct dependencies — each workspace member has its own
 
 [tool.uv.workspace]
-members = [
-    "packages/*",
-    "ingestion",
-    "transform",
-    "quality",
-    "orchestration",
-]
+members = ["shared", "ingestion", "transform", "quality", "orchestration"]
 
-[tool.uv]
-dev-dependencies = [
-    "pytest>=8.0",
-    "ruff>=0.8",
-    "pyright>=1.1",
-    "pre-commit>=4.0",
-]
+[dependency-groups]                                    # PEP 735
+dev = ["pytest>=8", "ruff>=0.9", "pyright>=1.1", "sqlfluff>=3", "pre-commit>=4"]
 
 [tool.ruff]
 target-version = "py313"
 line-length = 120
 
 [tool.ruff.lint]
-select = ["E", "F", "I", "UP", "B", "SIM", "TCH"]
-
-[tool.ruff.format]
-quote-style = "double"
+select = ["E", "F", "I", "UP", "B", "SIM", "TCH", "RUF", "N", "PTH", "ASYNC", "S", "ARG"]
 
 [tool.pyright]
 pythonVersion = "3.13"
-typeCheckingMode = "standard"
+typeCheckingMode = "strict"
 ```
 
 ---
 
-## Workspace Member pyproject.toml Examples
+## Workspace member (pattern)
 
-### packages/shared/pyproject.toml
+Every **packaged** member follows this shape. Example: `ingestion/pyproject.toml`.
+
 ```toml
 [project]
-name = "shared"
+name = "xdata-ingestion"
 version = "0.1.0"
 requires-python = ">=3.13"
-dependencies = [
-    "pydantic-settings>=2.5",
-    "structlog>=24.0",
-    "duckdb>=1.4",
-    "boto3>=1.34",
-]
-
-[build-system]
-requires = ["hatchling"]
-build-backend = "hatchling.build"
-```
-
-### ingestion/pyproject.toml
-```toml
-[project]
-name = "ingestion"
-version = "0.1.0"
-requires-python = ">=3.13"
-dependencies = [
-    "shared",                    # workspace member
-    "dlt[duckdb]>=1.0",
-]
+dependencies = ["xdata-shared", "dlt[duckdb]>=1.0"]
 
 [tool.uv.sources]
-shared = { workspace = true }   # resolved from workspace, not PyPI
+xdata-shared = { workspace = true }                    # resolve from workspace, not PyPI
 
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 ```
 
-### transform/pyproject.toml
-```toml
-[project]
-name = "transform"
-version = "0.1.0"
-requires-python = ">=3.13"
-dependencies = [
-    "shared",
-    "sqlmesh[duckdb]>=0.90",
-]
+`orchestration/` depends on `xdata-shared`, `xdata-ingestion`, `xdata-transform`, `xdata-quality`, and `dagster>=1.10` (+ `dagster-dlt`, `dagster-sqlmesh`). `dagster-webserver` goes in its `[dependency-groups] dev` — Dagster+ hosts the webserver in production.
 
-[tool.uv.sources]
-shared = { workspace = true }
-
-[build-system]
-requires = ["hatchling"]
-build-backend = "hatchling.build"
-```
-
-### orchestration/pyproject.toml
-```toml
-[project]
-name = "orchestration"
-version = "0.1.0"
-requires-python = ">=3.13"
-dependencies = [
-    "shared",
-    "ingestion",                 # depends on ingestion package
-    "transform",                 # depends on transform package
-    "quality",                   # depends on quality package
-    "dagster>=1.7",
-    "dagster-webserver>=1.7",
-    "dagster-dlt>=0.24",
-    "dagster-sqlmesh>=0.2",
-]
-
-[tool.uv.sources]
-shared = { workspace = true }
-ingestion = { workspace = true }
-transform = { workspace = true }
-quality = { workspace = true }
-
-[build-system]
-requires = ["hatchling"]
-build-backend = "hatchling.build"
-```
+`transform/` is a **non-packaged** workspace member: its `pyproject.toml` declares SQLMesh deps and sets `[tool.uv] package = false` (no `src/`, no build backend — there's no Python module to import, just SQL and deps).
 
 ---
 
 ## justfile
 
 ```just
-# justfile — bleeding edge task runner
-
-set dotenv-load                         # auto-load .env file
+set dotenv-load
 
 # ── Setup ──
-
-# First-time setup: install Python, deps, hooks, DuckLake
 setup:
     uv python install 3.13
     uv sync --all-packages
     uv run pre-commit install
-    uv run python scripts/setup_ducklake.py
-    uv run python scripts/seed_dev_data.py
 
-# ── Development ──
-
-# Start local dev (Dagster UI + local Postgres for DuckLake catalog)
+# ── Dev ──  (Dagster UI locally, pointed at dev AWS via .env)
 dev:
-    docker compose -f infra/docker/docker-compose.yml up -d postgres
     uv run --package orchestration dagster dev
 
-# Start Cube dev server (schema editing only — Cube runs on Cube Cloud in prod)
-cube-dev:
-    cd semantic && npm run dev
-
 # ── Transforms ──
-
-# Preview SQLMesh changes (column-level diff)
+[working-directory: 'transform']
 plan env="dev":
-    cd transform && uv run sqlmesh plan {{env}}
+    uv run sqlmesh plan {{env}}
 
-# Apply SQLMesh changes
+[working-directory: 'transform']
 apply env="dev":
-    cd transform && uv run sqlmesh plan {{env}} --auto-apply
+    uv run sqlmesh plan {{env}} --auto-apply
 
-# Diff two environments
-diff a="dev" b="prod":
-    cd transform && uv run sqlmesh diff {{a}} {{b}}
-
-# Run SQLMesh tests
-test-transform:
-    cd transform && uv run sqlmesh test
-
-# ── Quality ──
-
-# Run Soda quality checks
+# ── Quality / Test / Lint ──
 quality:
-    uv run --package quality soda scan -d duckdb -c quality/soda_config.yml quality/checks/
+    uv run --package quality soda scan -d duckdb -c quality/soda_config.yaml quality/checks/
 
-# ── Testing ──
-
-# Run all tests
 test:
-    uv run pytest ingestion/ -v
-    uv run pytest orchestration/ -v
-    just test-transform
+    uv run pytest
+    uv run --directory transform sqlmesh test
 
-# ── Code Quality ──
-
-# Lint and format
 lint:
     uv run ruff check .
     uv run ruff format --check .
     uv run pyright
+    uv run sqlfluff lint transform/models/
 
-# Fix lint issues
 fix:
     uv run ruff check --fix .
     uv run ruff format .
+    uv run sqlfluff fix transform/models/
 
-# ── Deployment ──
-
-# Deploy transforms to prod
-deploy-transforms:
-    cd transform && uv run sqlmesh plan prod --auto-apply
-
-# Deploy Dagster to cloud
-deploy-dagster:
-    dagster-cloud ci deploy
-
-# Full deploy
-deploy: deploy-transforms deploy-dagster
-
-# ── Utilities ──
-
-# Health check all connections
-health:
-    uv run python scripts/health_check.py
-
-# Export DuckLake to Iceberg (escape hatch)
-export-iceberg:
-    uv run python scripts/export_to_iceberg.py
-
-# Add a new dlt source (scaffolding)
-new-source name:
-    touch ingestion/src/ingestion/sources/{{name}}.py
-    touch ingestion/schemas/{{name}}.schema.yaml
-    @echo "Created source scaffold for {{name}}"
-    @echo "Next: edit ingestion/src/ingestion/sources/{{name}}.py"
-
-# Add a new SQLMesh model (scaffolding)
-new-model layer name:
-    touch transform/models/{{layer}}/{{name}}.sql
-    @echo "Created model: transform/models/{{layer}}/{{name}}.sql"
-
-# Lock and update deps
-lock:
-    uv lock
-
-upgrade:
-    uv lock --upgrade
+# ── Deploy ──
+deploy:
+    uv run --directory transform sqlmesh plan prod --auto-apply
+    uv run dagster-plus ci deploy
 ```
+
+There is no local data stack. `dagster dev` runs the UI on the developer's machine but connects to the **dev** AWS environment (RDS Postgres catalog + S3 dev bucket) via `.env`. DuckDB is an in-process library — the engine runs wherever the code runs, including inside Dagster+.
 
 ---
 
-## .pre-commit-config.yaml
+## pre-commit
 
 ```yaml
 repos:
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.8.0
+    rev: v0.9.0
     hooks:
       - id: ruff
         args: [--fix]
       - id: ruff-format
-
+  - repo: https://github.com/sqlfluff/sqlfluff
+    rev: 3.3.0
+    hooks:
+      - id: sqlfluff-lint
+        files: ^transform/models/
   - repo: local
     hooks:
       - id: pyright
@@ -477,191 +222,81 @@ repos:
 
 ---
 
-## CI/CD (.github/workflows/ci.yml)
+## CI (ci.yml, sketch)
 
 ```yaml
 name: CI
-
 on:
   pull_request:
     branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
 
 env:
   UV_CACHE_DIR: .uv-cache
 
 jobs:
-  lint:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v4
-        with:
-          enable-cache: true
-      - run: uv sync --all-packages
-      - run: uv run ruff check .
-      - run: uv run ruff format --check .
-      - run: uv run pyright
-
-  test:
-    runs-on: ubuntu-latest
-    needs: lint
-    steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v4
-        with:
-          enable-cache: true
-      - run: uv sync --all-packages
-      - run: uv run pytest ingestion/ -v
-      - run: uv run pytest orchestration/ -v
-
-  sqlmesh-plan:
-    runs-on: ubuntu-latest
-    needs: test
-    steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v4
-        with:
-          enable-cache: true
-      - run: uv sync --package transform
-      - run: cd transform && uv run sqlmesh plan --auto-categorize
-
-  soda-scan:
-    runs-on: ubuntu-latest
-    needs: sqlmesh-plan
-    steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v4
-        with:
-          enable-cache: true
-      - run: uv sync --package quality
-      - run: uv run --package quality soda scan -d duckdb -c quality/soda_config.yml quality/checks/
+  lint:                    # ruff check + format + pyright + sqlfluff
+  test:                    # pytest + sqlmesh test     (needs: lint)
+  sqlmesh-plan:            # plan against ephemeral PR env, not unbound (needs: test)
+  soda-scan:               # scan the materialized ephemeral env         (needs: sqlmesh-plan)
+  branch-deployment:       # dagster-cloud-action → Dagster+ per-PR env  (needs: test)
 ```
+
+On merge to main, `deploy.yml` runs `sqlmesh plan prod --auto-apply` then `dagster-plus ci deploy`.
 
 ---
 
-## Inline Script Metadata (PEP 723)
+## Scripts (PEP 723)
 
-Utility scripts don't need to be part of the workspace. They declare their own deps inline:
+Utility scripts declare deps inline and run via `uv run scripts/<name>.py` — no install step, not part of the workspace:
 
 ```python
-# scripts/setup_ducklake.py
 # /// script
 # requires-python = ">=3.13"
-# dependencies = ["duckdb>=1.4", "pydantic-settings>=2.5"]
+# dependencies = ["duckdb>=1.4"]
 # ///
-
-"""Initialize DuckLake: create catalog schemas and verify connectivity."""
-
-import duckdb
-
-def main():
-    conn = duckdb.connect()
-    conn.install_extension("ducklake")
-    conn.load_extension("ducklake")
-    
-    conn.sql("""
-        ATTACH 'postgres:dbname=ducklake_catalog host=localhost' 
-        AS lake (TYPE ducklake, DATA_PATH 's3://my-datalake/warehouse/')
-    """)
-    
-    for schema in ["raw", "staging", "marts"]:
-        conn.sql(f"CREATE SCHEMA IF NOT EXISTS lake.{schema}")
-        print(f"✓ Schema lake.{schema} ready")
-
-if __name__ == "__main__":
-    main()
-
-# Run with: uv run scripts/setup_ducklake.py
-# uv auto-creates a venv with the declared deps — no install step
 ```
 
 ---
 
-## Local Development Flow
+## Per-layer installs
 
-```bash
-# 1. Clone
-git clone git@github.com:yourorg/data-platform.git
-cd data-platform
-
-# 2. Setup (uv installs Python 3.13 + all deps in seconds)
-just setup
-
-# 3. Develop
-just dev                          # Dagster UI at localhost:3000
-
-# 4. Add a new source
-just new-source zendesk            # scaffolds files
-# edit ingestion/src/ingestion/sources/zendesk.py
-# edit orchestration/src/orchestration/assets/ingestion.py
-
-# 5. Add a model
-just new-model staging stg_zendesk__tickets
-# edit transform/models/staging/stg_zendesk__tickets.sql
-just plan                          # see column-level diff
-just apply                         # execute in virtual dev env
-
-# 6. Check quality
-just quality
-
-# 7. Lint + type check
-just lint                          # or `just fix` to auto-fix
-
-# 8. Open PR → CI runs everything
-# 9. Merge → CD deploys to prod
 ```
+uv sync --package ingestion       # dlt + shared only
+uv sync --package transform       # sqlmesh + shared only
+uv sync --package orchestration   # everything (transitive)
+uv sync --all-packages            # dev: whole workspace
+```
+
+CI jobs install only what they need; the root `uv.lock` keeps versions consistent across members.
 
 ---
 
-## Environment Strategy
+## Environments
 
-```
-┌──────────────────┐    ┌──────────────────┐    ┌──────────────────┐
-│    Local Dev      │    │     Staging       │    │    Production     │
-│                   │    │                   │    │                   │
-│  DuckDB           │    │  DuckDB +         │    │  DuckDB +         │
-│  (in-process)     │    │  DuckLake         │    │  DuckLake         │
-│                   │    │                   │    │                   │
-│  Postgres         │    │  RDS Postgres     │    │  RDS Postgres     │
-│  (Docker)         │    │  (staging)        │    │  (prod)           │
-│                   │    │                   │    │                   │
-│  Local fs or      │    │  S3               │    │  S3               │
-│  MinIO            │    │  staging bucket   │    │  prod bucket      │
-└──────────────────┘    └──────────────────┘    └──────────────────┘
+| Env | Compute | Catalog | Files |
+|---|---|---|---|
+| Dev  | DuckDB + DuckLake | RDS Postgres (dev)  | S3 dev  |
+| Int  | DuckDB + DuckLake | RDS Postgres (int)  | S3 int  |
+| Prod | DuckDB + DuckLake | RDS Postgres (prod) | S3 prod |
 
-SQLMesh virtual environments eliminate data duplication.
-`just plan staging` previews changes.
-`just apply prod` deploys.
-```
+All three environments are AWS — there is no local data stack. SQLMesh virtual environments eliminate data duplication *within* each AWS env: `just plan dev` previews, `just apply prod` deploys.
 
 ---
 
-## Why uv Workspaces > Flat pyproject.toml
+## Tooling rationale
 
-The key insight: **each layer has different dependencies and they shouldn't pollute each other.**
-
-```
-uv sync --package ingestion      # installs only dlt + shared deps
-uv sync --package transform      # installs only sqlmesh + shared deps
-uv sync --package orchestration  # installs everything (it depends on all layers)
-uv sync --all-packages           # installs the full workspace
-```
-
-In CI, this means you can **run SQLMesh plan without installing Dagster**, and run Soda scans without installing dlt. Faster CI, smaller containers, clearer dependency boundaries.
-
-The single `uv.lock` at the root guarantees version consistency across all packages — no "works on my machine" because ingestion pinned duckdb 1.3 while transform pinned duckdb 1.4.
-
----
-
-## Summary: What Makes This Bleeding Edge
-
-| Layer | Tool | Why it's bleeding edge |
-|---|---|---|
-| Package manager | uv | Replaces pip/poetry/pipenv. 100× faster. Workspace monorepo support. |
-| Task runner | just | Replaces Make. Clean syntax, arguments, dotenv loading. |
-| Linter + formatter | ruff | Replaces black + isort + flake8 + pyflakes. Single Rust binary. |
-| Type checker | pyright | Catches bugs before runtime. Strict mode optional. |
-| Pre-commit | ruff + pyright hooks | Every commit is lint-clean and type-safe. |
-| Scripts | PEP 723 inline metadata | Utility scripts declare their own deps. `uv run` handles the rest. |
-| CI deps | `uv sync --package X` | Install only what each CI job needs. Faster, smaller. |
-| Python version | 3.13 (managed by uv) | No pyenv. uv installs Python for you. |
+- **uv** — 100× faster than pip; native workspace support; replaces pip/poetry/pyenv.
+- **just** — arguments, `[working-directory]`, dotenv loading; replaces Make.
+- **ruff** — single Rust binary; replaces black/isort/flake8.
+- **pyright** — strict type checking.
+- **sqlfluff** — SQL is the product; lint it too.
+- **Dagster+ Serverless** — hosted webserver/daemon, branch deployments per PR, no user-code Dockerfile required.
+- **PEP 723 scripts** — dep-declaring one-offs without workspace overhead.
+- **PEP 735 dependency groups** — tool-agnostic dev deps.
