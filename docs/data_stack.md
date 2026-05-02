@@ -77,30 +77,17 @@ s3://my-datalake/warehouse/
 
 ## 3. Compute — DuckDB
 
-DuckDB is the only query engine, in every environment. It runs in-process, reads DuckLake natively via the `ducklake` extension, and spills to disk when memory is exhausted.
+DuckDB is the only query engine. It runs in-process and reads DuckLake natively via the `ducklake` extension. Every environment is on AWS — there is no local data stack — and each has its own RDS Postgres catalog and S3 bucket.
 
-There is no separate local data stack: every environment is on AWS, with its own RDS Postgres catalog and its own S3 bucket. Blast radius stays contained per env and IAM stays clean.
+| Env | Catalog | Files |
+|---|---|---|
+| Dev | RDS Postgres (dev) | `s3://lake-dev/` |
+| Int | RDS Postgres (int) | `s3://lake-int/` |
+| Prod | RDS Postgres (prod) | `s3://lake-prod/` |
 
-| Env | Compute | Catalog | Files |
-|---|---|---|---|
-| Dev | DuckDB + DuckLake | RDS Postgres (dev) | `s3://lake-dev/` |
-| Int | DuckDB + DuckLake | RDS Postgres (int) | `s3://lake-int/` |
-| Prod | DuckDB + DuckLake | RDS Postgres (prod) | `s3://lake-prod/` |
+SQLMesh virtual environments handle previews *within* an env without copying data; promotion *across* envs is `sqlmesh plan <env> --apply` from CI.
 
-The DuckDB *process* runs wherever convenient — a laptop or Codespace for `sqlmesh plan dev` iteration, a CI runner for cross-env promotions, and AWS compute (Dagster Cloud or ECS, same region as RDS + S3) for scheduled production runs. Heavy ad-hoc queries should also run on AWS compute, not laptops, to avoid S3 egress.
-
-SQLMesh virtual environments give cheap previews *within* a single env — only changed models are materialized, no data duplication. Promotion *across* envs happens via Git → CI running `sqlmesh plan <env> --apply` against the target's catalog and bucket. The SQLMesh state DB lives in a separate schema on the same per-env RDS instance.
-
-Single-node scale has practical limits: a working set beyond roughly 10 TB, or concurrency beyond tens of heavy queries, is a signal to export the catalog to Iceberg and run Trino or Spark against the same S3 data.
-
-| Setting | Value |
-|---|---|
-| Engine | DuckDB (Dev, Int, Prod) |
-| Region | Single AWS region for catalog, files, and compute |
-| Networking | VPC endpoint for S3; RDS via SG-scoped access or RDS Proxy |
-| Memory | Spills to disk when RAM exhausted |
-| Practical Ceiling | ~10 TB working set, tens of concurrent heavy queries |
-| Migration Path | DuckLake → Iceberg export → Trino/Spark |
+Single-node ceiling: ~10 TB working set or tens of concurrent heavy queries. Beyond that, export the catalog to Iceberg and run Trino or Spark against the same S3 data.
 
 ---
 
