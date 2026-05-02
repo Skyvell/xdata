@@ -23,7 +23,7 @@ def orders():
 
 pipeline = dlt.pipeline(
     pipeline_name="my_pipeline",
-    destination="duckdb",
+    destination="ducklake",
     dataset_name="raw",
 )
 pipeline.run(orders())
@@ -31,7 +31,7 @@ pipeline.run(orders())
 
 | Setting | Value |
 |---|---|
-| Destination | `duckdb` (writes to DuckLake) |
+| Destination | `ducklake` — `pip install "dlt[ducklake]"` |
 | Write Disposition | `append`, `replace`, `merge` (Type 1), `scd2` (Type 2) |
 | Incremental | Cursor-based and merge-based |
 | File Format | Parquet |
@@ -77,12 +77,27 @@ s3://my-datalake/warehouse/
 
 ## 3. Compute — DuckDB
 
-DuckDB is the query engine for both local development and production. It runs in-process, reads DuckLake natively via the `ducklake` extension, and spills to disk when memory is exhausted. Single-node scale has practical limits: a working set beyond roughly 10 TB, or concurrency beyond tens of heavy queries, is a signal to export the catalog to Iceberg and run Trino or Spark against it.
+DuckDB is the only query engine, in every environment. It runs in-process, reads DuckLake natively via the `ducklake` extension, and spills to disk when memory is exhausted.
+
+There is no separate local data stack: every environment is on AWS, with its own RDS Postgres catalog and its own S3 bucket. Blast radius stays contained per env and IAM stays clean.
+
+| Env | Compute | Catalog | Files |
+|---|---|---|---|
+| Dev | DuckDB + DuckLake | RDS Postgres (dev) | `s3://lake-dev/` |
+| Int | DuckDB + DuckLake | RDS Postgres (int) | `s3://lake-int/` |
+| Prod | DuckDB + DuckLake | RDS Postgres (prod) | `s3://lake-prod/` |
+
+The DuckDB *process* runs wherever convenient — a laptop or Codespace for `sqlmesh plan dev` iteration, a CI runner for cross-env promotions, and AWS compute (Dagster Cloud or ECS, same region as RDS + S3) for scheduled production runs. Heavy ad-hoc queries should also run on AWS compute, not laptops, to avoid S3 egress.
+
+SQLMesh virtual environments give cheap previews *within* a single env — only changed models are materialized, no data duplication. Promotion *across* envs happens via Git → CI running `sqlmesh plan <env> --apply` against the target's catalog and bucket. The SQLMesh state DB lives in a separate schema on the same per-env RDS instance.
+
+Single-node scale has practical limits: a working set beyond roughly 10 TB, or concurrency beyond tens of heavy queries, is a signal to export the catalog to Iceberg and run Trino or Spark against the same S3 data.
 
 | Setting | Value |
 |---|---|
-| Local Dev | DuckDB CLI or Python — no cluster |
-| Production | DuckDB on Dagster Cloud compute |
+| Engine | DuckDB (Dev, Int, Prod) |
+| Region | Single AWS region for catalog, files, and compute |
+| Networking | VPC endpoint for S3; RDS via SG-scoped access or RDS Proxy |
 | Memory | Spills to disk when RAM exhausted |
 | Practical Ceiling | ~10 TB working set, tens of concurrent heavy queries |
 | Migration Path | DuckLake → Iceberg export → Trino/Spark |
@@ -101,11 +116,11 @@ MODEL (
   name marts.fct_revenue,
   kind INCREMENTAL_BY_TIME_RANGE (
     time_column order_date,
-    batch_size 7,
+    batch_size 7,  -- backfill 7 days per batch
   ),
   grain (order_id),
   audits (
-    assert_positive_values(columns=[revenue]),
+    accepted_range(column=revenue, min_v=0),
     not_null(columns=[order_id, customer_id]),
   ),
 );
@@ -142,7 +157,7 @@ sqlmesh diff prod dev  # compare environments
 
 ## 5. Orchestration — Dagster
 
-Dagster is the asset-based orchestrator. Each dlt source and each SQLMesh model surfaces as a data asset with dependencies, freshness policies, and materialization history. First-class integrations exist for both (`dagster-dlt`, `dagster-sqlmesh`).
+Dagster is the asset-based orchestrator. Each dlt source and each SQLMesh model surfaces as a data asset with dependencies, freshness policies, and materialization history. `dagster-dlt` is maintained by Dagster Labs; `dagster-sqlmesh` is a community-maintained package.
 
 For a small team with a single pipeline, SQLMesh's built-in scheduler is sufficient. Dagster earns its place when there are multiple sources on different schedules, cross-system dependencies (dlt → SQLMesh → Cube refresh), per-asset freshness SLAs, or event-driven triggers such as S3 object creation.
 
@@ -182,8 +197,7 @@ MODEL (
   audits (
     not_null(columns=[order_id, revenue, order_date]),
     unique_values(columns=[order_id]),
-    assert_positive_values(columns=[revenue]),
-    accepted_range(column=revenue, min_value=0, max_value=1000000),
+    accepted_range(column=revenue, min_v=0, max_v=1000000),
   ),
 );
 ```
@@ -193,13 +207,13 @@ MODEL (
 checks for raw.orders:
   - freshness(updated_at) < 6h
   - row_count > 0
-  - anomaly detection for row_count
+  - anomaly detection for row_count   # requires Soda Cloud
   - schema:
       fail:
         when forbidden column present: [ssn, credit_card]
 
 checks for marts.fct_revenue:
-  - anomaly detection for avg(revenue)
+  - anomaly detection for avg(revenue)   # requires Soda Cloud
   - duplicate_count(order_id) = 0
   - failed rows:
       fail condition: revenue < 0
@@ -220,6 +234,7 @@ Cube defines business metrics once — measures, dimensions, joins — and expos
 
 ```javascript
 // cube/schema/Revenue.js
+// `lake` is the DuckLake catalog attached in Cube's DuckDB driver config
 cube('Revenue', {
   sql_table: 'lake.marts.fct_revenue',
 
@@ -239,7 +254,7 @@ cube('Revenue', {
 });
 ```
 
-Pre-aggregations are declared in the same schema with a refresh interval. Cube materializes them to storage (S3 or Postgres) and routes matching queries automatically.
+Pre-aggregations are declared in the same schema with a refresh interval. Cube materializes them to **Cube Store** (Parquet files on blob storage such as S3) and routes matching queries automatically.
 
 | Setting | Value |
 |---|---|
