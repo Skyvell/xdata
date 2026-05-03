@@ -45,14 +45,15 @@ just bootstrap-state eu-north-1 xdata-tofu-state
 
 **Deploy infra:**
 
+Merges to `main` that touch `infra/` deploy automatically via GitHub Actions (OIDC, no stored credentials). To preview changes locally first:
+
 ```bash
 just tofu-plan prod
-just tofu-apply prod
 ```
 
-GitHub Actions assumes the `xdata-deploy-role` IAM role via OIDC — no stored credentials. See [docs/opentofu_project_guide.md](docs/opentofu_project_guide.md).
+See [docs/opentofu_project_guide.md](docs/opentofu_project_guide.md).
 
 ## TODO
 
 - [ ] Deploy infra (`tofu apply` prod)
-- [ ] CI/CD — GitHub Actions workflow for `tofu plan` on PR and `tofu apply` on merge to main
+- [ ] CI/CD — `tofu plan` on PR
