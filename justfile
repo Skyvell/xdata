@@ -1,4 +1,4 @@
-# List available recipes
+# List available recipes.
 default:
     @just --list
 
