@@ -1,0 +1,19 @@
+name: Deploy infrastructure
+
+on:
+  push:
+    branches: [main]
+    paths: [infra/**]
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+
+  # Merge to main → deploy prod.
+  deploy:
+    uses: ./.github/workflows/_deploy-infrastructure.yml
+    with:
+      environment: prod
+    secrets: inherit
