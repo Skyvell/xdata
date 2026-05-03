@@ -1,0 +1,6 @@
+bucket = "xdata-tofu-state"
+key    = "prod/opentofu.tfstate"
+region = "eu-north-1"
+
+encrypt      = true
+use_lockfile = true
