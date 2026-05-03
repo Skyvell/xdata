@@ -17,3 +17,7 @@ tofu-plan env: (tofu-init env)
 # Apply OpenTofu changes for the given environment.
 tofu-apply env: (tofu-init env)
     tofu -chdir=infra/live apply -var-file=../config/{{env}}.tfvars
+
+# Destroy OpenTofu-managed resources for the given environment.
+tofu-destroy env: (tofu-init env)
+    tofu -chdir=infra/live destroy -var-file=../config/{{env}}.tfvars
