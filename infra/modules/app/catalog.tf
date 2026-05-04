@@ -7,7 +7,7 @@ resource "aws_db_subnet_group" "catalog" {
 resource "aws_db_instance" "catalog" {
   identifier     = "${local.prefix}-catalog"
   engine         = "postgres"
-  engine_version = "16"
+  engine_version = "16.13"
   instance_class = var.catalog_instance_class
 
   db_name                     = "ducklake"
@@ -20,8 +20,13 @@ resource "aws_db_instance" "catalog" {
   storage_type      = "gp3"
   allocated_storage = 20
 
-  skip_final_snapshot = true
-  deletion_protection = false
+  publicly_accessible = false
+  multi_az            = var.catalog_multi_az
+
+  backup_retention_period   = var.catalog_backup_retention_period
+  skip_final_snapshot       = var.catalog_skip_final_snapshot
+  final_snapshot_identifier = "${local.prefix}-catalog-final"
+  deletion_protection       = var.catalog_deletion_protection
 
   tags = local.tags
 }

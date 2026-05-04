@@ -1,18 +1,44 @@
 variable "env" {
-  type = string
+  type        = string
+  description = "Deployment environment name."
+  validation {
+    condition     = contains(["prod", "staging", "dev"], var.env)
+    error_message = "env must be one of: prod, staging, dev."
+  }
 }
 
 variable "region" {
-  type    = string
-  default = "eu-north-1"
+  type        = string
+  description = "AWS region to deploy into."
+  default     = "eu-north-1"
 }
 
 variable "catalog_instance_class" {
-  type    = string
-  default = "db.t4g.micro"
+  type        = string
+  description = "RDS instance class for the catalog database."
+  default     = "db.t4g.micro"
 }
 
-variable "features" {
-  type    = object({})
-  default = {}
+variable "catalog_multi_az" {
+  type        = bool
+  description = "Enable Multi-AZ for the catalog RDS instance."
+  default     = false
+}
+
+variable "catalog_backup_retention_period" {
+  type        = number
+  description = "Number of days to retain automated RDS backups. 0 disables backups."
+  default     = 0
+}
+
+variable "catalog_skip_final_snapshot" {
+  type        = bool
+  description = "Skip final snapshot when the catalog RDS instance is destroyed."
+  default     = true
+}
+
+variable "catalog_deletion_protection" {
+  type        = bool
+  description = "Enable deletion protection on the catalog RDS instance."
+  default     = false
 }

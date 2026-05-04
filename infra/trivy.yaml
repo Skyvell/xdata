@@ -1,3 +1,7 @@
 scan:
   scanners:
     - misconfig
+  severity:
+    - HIGH
+    - CRITICAL
+exit-code: 1
