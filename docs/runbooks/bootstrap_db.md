@@ -1,13 +1,15 @@
 # Bootstrap `ducklake_app`
 
-Create the `ducklake_app` role and the `ducklake` schema in the catalog
-database. Required once per environment after `tofu apply`. Required again
-after rotating `random_password.ducklake_app`.
+Create the `ducklake_app` role with permissions to initialize and manage the
+DuckLake catalog. Required once per environment after `tofu apply`.
+
+DuckLake stores its metadata in the `public` schema by default, so no extra
+schema is created.
 
 ## Prerequisites
 
 - `aws` CLI authenticated against the target account.
-- DuckDB CLI: `brew install duckdb`.
+- [TablePlus](https://tableplus.com/) (or any PostgreSQL client).
 - Caller IP present in `catalog_allowed_cidrs` (`infra/config/<env>.tfvars`).
 
 ## Procedure
@@ -39,54 +41,50 @@ aws secretsmanager get-secret-value \
 
 Yields `host`, `port`, `database`, `username`, `password`.
 
-### 3. DDL via DuckDB
+### 3. Connect as master
 
-`duckdb -ui`, then:
+In TablePlus: new connection → PostgreSQL.
+
+- Host, Port, Database: from step 2
+- User, Password: from step 1
+- SSL Mode: **Require**
+
+### 4. Run the SQL
 
 ```sql
-INSTALL postgres;
-LOAD postgres;
-
-ATTACH 'host=<host> port=<port> dbname=<database>
-        user=<master_username> password=<master_password> sslmode=require'
-  AS pg (TYPE postgres);
-
-CALL postgres_execute('pg', $$
-DO $do$
-BEGIN
-  IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'ducklake_app') THEN
-    CREATE USER ducklake_app WITH PASSWORD '<app_password>';
-  ELSE
-    ALTER USER ducklake_app WITH PASSWORD '<app_password>';
-  END IF;
-END$do$;
-$$);
-
-CALL postgres_execute('pg', 'GRANT CONNECT ON DATABASE ducklake TO ducklake_app');
-CALL postgres_execute('pg', 'CREATE SCHEMA IF NOT EXISTS ducklake AUTHORIZATION ducklake_app');
+CREATE USER ducklake_app WITH PASSWORD '<app_password>';
+GRANT CREATE ON DATABASE ducklake TO ducklake_app;
+GRANT CREATE, USAGE ON SCHEMA public TO ducklake_app;
 ```
 
-Statements are idempotent.
+To rotate the password later (after `tofu taint random_password.ducklake_app` + `tofu apply`):
+
+```sql
+ALTER USER ducklake_app WITH PASSWORD '<new_password>';
+```
 
 ## Verification
 
 ```sql
-SELECT * FROM postgres_query('pg', $$
-  SELECT rolname FROM pg_roles WHERE rolname = 'ducklake_app'
-$$);
+SELECT rolname FROM pg_roles WHERE rolname = 'ducklake_app';
 
-SELECT * FROM postgres_query('pg', $$
-  SELECT nspname, nspowner::regrole AS owner
-  FROM pg_namespace WHERE nspname = 'ducklake'
-$$);
+SELECT has_database_privilege('ducklake_app', 'ducklake', 'CREATE') AS db_create,
+       has_schema_privilege('ducklake_app', 'public', 'CREATE')     AS public_create,
+       has_schema_privilege('ducklake_app', 'public', 'USAGE')      AS public_usage;
 ```
 
-Expected: one row from each query; schema owner equals `ducklake_app`.
+Expected: role exists; all three privilege columns return `true`.
 
-End-to-end via DuckLake:
+## End-to-end check (optional)
+
+Confirm DuckLake initializes against the catalog. Requires DuckDB CLI
+(`brew install duckdb`).
+
+```bash
+duckdb -ui
+```
 
 ```sql
-DETACH pg;
 INSTALL ducklake;
 LOAD ducklake;
 
@@ -98,4 +96,4 @@ USE lake;
 SHOW SCHEMAS;
 ```
 
-Expected: `ducklake` listed.
+Expected: attach succeeds; default schemas listed.
