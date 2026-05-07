@@ -89,7 +89,7 @@ dev_ted   -> local development data
 ## Database users
 
 ```text
-ducklake_app
+app
   Used by Dagster/ECS production jobs, local development, and inspection
   dlt, SQLMesh, TablePlus, and DuckDB UI all connect as this user
   Prod vs dev isolation comes from DATA_PATH (S3 prefix), not DB grants
@@ -128,7 +128,7 @@ Keep local access simple with `.env.dev`. Use dlt's native env var conventions s
 
 ```bash
 # dlt DuckLake destination (dlt resolves these automatically)
-DESTINATION__DUCKLAKE__CREDENTIALS__CATALOG=postgres://ducklake_app:<password>@127.0.0.1:5432/ducklake
+DESTINATION__DUCKLAKE__CREDENTIALS__CATALOG=postgres://app:<password>@127.0.0.1:5432/ducklake
 DESTINATION__DUCKLAKE__CREDENTIALS__STORAGE=s3://my-ducklake/dev/ted/
 
 SQLMESH_ENVIRONMENT=dev_ted
@@ -165,7 +165,7 @@ Example DuckLake secret:
   "host": "my-rds.xxxxxx.eu-north-1.rds.amazonaws.com",
   "port": "5432",
   "database": "ducklake",
-  "username": "ducklake_app",
+  "username": "app",
   "password": "..."
 }
 ```
@@ -181,7 +181,7 @@ API auth: .env.dev / local test token
 DuckLake catalog auth: .env.dev + SSM tunnel
 S3 auth: local AWS profile
 Writes to: s3://my-ducklake/dev/ted/
-DB user: ducklake_app
+DB user: app
 ```
 
 ### Production dlt
@@ -191,7 +191,7 @@ API auth: AWS Secrets Manager
 DuckLake/RDS auth: AWS Secrets Manager
 S3 auth: ECS task IAM role
 Writes to: s3://my-ducklake/prod/raw/
-DB user: ducklake_app
+DB user: app
 ```
 
 ### Local SQLMesh
@@ -245,7 +245,7 @@ For inspection:
 TablePlus:
   Host: 127.0.0.1
   Port: 5432
-  User: ducklake_app
+  User: app
 
 DuckDB Local UI:
   duckdb -ui

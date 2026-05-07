@@ -1,7 +1,7 @@
-# Bootstrap `ducklake_app`
+# Bootstrap the catalog `app` user
 
-Create the `ducklake_app` role with permissions to initialize and manage the
-DuckLake catalog. Required once per environment after `tofu apply`.
+Create the `app` PostgreSQL role with permissions to initialize and manage
+the DuckLake catalog. Required once per environment after `tofu apply`.
 
 DuckLake stores its metadata in the `public` schema by default, so no extra
 schema is created.
@@ -52,25 +52,25 @@ In TablePlus: new connection → PostgreSQL.
 ### 4. Run the SQL
 
 ```sql
-CREATE USER ducklake_app WITH PASSWORD '<app_password>';
-GRANT CREATE ON DATABASE ducklake TO ducklake_app;
-GRANT CREATE, USAGE ON SCHEMA public TO ducklake_app;
+CREATE USER app WITH PASSWORD '<app_password>';
+GRANT CREATE ON DATABASE ducklake TO app;
+GRANT CREATE, USAGE ON SCHEMA public TO app;
 ```
 
-To rotate the password later (after `tofu taint random_password.ducklake_app` + `tofu apply`):
+To rotate the password later (after `tofu taint random_password.app` + `tofu apply`):
 
 ```sql
-ALTER USER ducklake_app WITH PASSWORD '<new_password>';
+ALTER USER app WITH PASSWORD '<new_password>';
 ```
 
 ## Verification
 
 ```sql
-SELECT rolname FROM pg_roles WHERE rolname = 'ducklake_app';
+SELECT rolname FROM pg_roles WHERE rolname = 'app';
 
-SELECT has_database_privilege('ducklake_app', 'ducklake', 'CREATE') AS db_create,
-       has_schema_privilege('ducklake_app', 'public', 'CREATE')     AS public_create,
-       has_schema_privilege('ducklake_app', 'public', 'USAGE')      AS public_usage;
+SELECT has_database_privilege('app', 'ducklake', 'CREATE') AS db_create,
+       has_schema_privilege('app', 'public', 'CREATE')     AS public_create,
+       has_schema_privilege('app', 'public', 'USAGE')      AS public_usage;
 ```
 
 Expected: role exists; all three privilege columns return `true`.
@@ -89,7 +89,7 @@ INSTALL ducklake;
 LOAD ducklake;
 
 ATTACH 'postgres:dbname=<database> host=<host> port=<port>
-        user=ducklake_app password=<app_password> sslmode=require'
+        user=app password=<app_password> sslmode=require'
   AS lake (TYPE ducklake, DATA_PATH 's3://xdata-<env>-lake/');
 
 USE lake;

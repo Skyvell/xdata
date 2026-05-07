@@ -1,11 +1,11 @@
-resource "random_password" "ducklake_app" {
+resource "random_password" "app" {
   length  = 32
   special = false
 }
 
 resource "aws_secretsmanager_secret" "catalog" {
   name        = "/xdata/${var.env}/ducklake/catalog"
-  description = "DuckLake catalog connection for ducklake_app."
+  description = "DuckLake catalog connection for the app user."
 
   tags = local.tags
 }
@@ -16,7 +16,7 @@ resource "aws_secretsmanager_secret_version" "catalog" {
     host     = aws_db_instance.catalog.address
     port     = aws_db_instance.catalog.port
     database = aws_db_instance.catalog.db_name
-    username = "ducklake_app"
-    password = random_password.ducklake_app.result
+    username = "app"
+    password = random_password.app.result
   })
 }

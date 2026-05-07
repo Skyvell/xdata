@@ -11,7 +11,7 @@ resource "aws_db_instance" "catalog" {
   instance_class = var.catalog_instance_class
 
   db_name                     = "ducklake"
-  username                    = "ducklake"
+  username                    = "dbadmin"
   manage_master_user_password = true
 
   db_subnet_group_name   = aws_db_subnet_group.catalog.name
