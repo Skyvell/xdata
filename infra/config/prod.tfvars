@@ -6,3 +6,5 @@ catalog_multi_az                = true
 catalog_backup_retention_period = 7
 catalog_skip_final_snapshot     = false
 catalog_deletion_protection     = true
+
+catalog_allowed_cidrs = ["217.119.174.244/32"]

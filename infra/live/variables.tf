@@ -42,3 +42,9 @@ variable "catalog_deletion_protection" {
   description = "Enable deletion protection on the catalog RDS instance."
   default     = false
 }
+
+variable "catalog_allowed_cidrs" {
+  type        = list(string)
+  description = "CIDR blocks allowed inbound on the catalog RDS port. Empty = no public access."
+  default     = []
+}
