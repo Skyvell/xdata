@@ -1,2 +1,5 @@
 # Terraform/OpenTofu
 .terraform/
+
+# Claude Code local state
+.claude/
