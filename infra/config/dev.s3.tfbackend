@@ -1,5 +1,5 @@
-bucket = "xdata-tofu-state"
-key    = "prod/opentofu.tfstate"
+bucket = "tofu-state-975050249037"
+key    = "opentofu.tfstate"
 region = "eu-north-1"
 
 encrypt      = true

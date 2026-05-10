@@ -1,12 +1,3 @@
-variable "env" {
-  type        = string
-  description = "Deployment environment name."
-  validation {
-    condition     = contains(["prod", "staging", "dev"], var.env)
-    error_message = "env must be one of: prod, staging, dev."
-  }
-}
-
 variable "region" {
   type        = string
   description = "AWS region to deploy into."
@@ -45,6 +36,6 @@ variable "catalog_deletion_protection" {
 
 variable "catalog_allowed_cidrs" {
   type        = list(string)
-  description = "CIDR blocks allowed inbound on the catalog RDS port. Empty = no public access."
+  description = "CIDR blocks allowed inbound on the catalog RDS port."
   default     = []
 }

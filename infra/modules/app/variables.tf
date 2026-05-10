@@ -1,12 +1,3 @@
-variable "env" {
-  type        = string
-  description = "Deployment environment name."
-  validation {
-    condition     = contains(["prod", "staging", "dev"], var.env)
-    error_message = "env must be one of: prod, staging, dev."
-  }
-}
-
 variable "region" {
   type        = string
   description = "AWS region to deploy into."

@@ -11,9 +11,10 @@ permissions:
 
 jobs:
 
-  # Merge to main → deploy prod.
+  # Merge to main → deploy dev (the only env in this account today).
+  # When the prod AWS account is added, a release event will deploy to prod.
   deploy:
     uses: ./.github/workflows/_deploy-infrastructure.yml
     with:
-      environment: prod
+      environment: dev
     secrets: inherit

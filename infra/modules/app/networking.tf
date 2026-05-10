@@ -9,8 +9,10 @@ data "aws_subnets" "default" {
   }
 }
 
+data "aws_caller_identity" "current" {}
+
 resource "aws_security_group" "catalog" {
-  name   = "${local.prefix}-catalog"
+  name   = "ducklake-catalog"
   vpc_id = data.aws_vpc.default.id
   tags   = local.tags
 }

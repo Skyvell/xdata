@@ -1,8 +1,6 @@
 locals {
-  prefix = "xdata-${var.env}"
   tags = {
-    env     = var.env
-    project = "xdata"
+    project = "ducklake"
     managed = "opentofu"
   }
 }

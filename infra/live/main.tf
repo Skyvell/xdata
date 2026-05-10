@@ -1,7 +1,6 @@
 module "app" {
   source = "../modules/app"
 
-  env    = var.env
   region = var.region
 
   catalog_instance_class          = var.catalog_instance_class
@@ -13,5 +12,5 @@ module "app" {
 }
 
 output "catalog_endpoint" { value = module.app.catalog_endpoint }
+output "catalog_master_secret_arn" { value = module.app.catalog_master_secret_arn }
 output "lake_bucket_name" { value = module.app.lake_bucket_name }
-output "catalog_secret_arn" { value = module.app.catalog_secret_arn }

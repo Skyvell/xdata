@@ -1,6 +1,7 @@
 resource "aws_s3_bucket" "lake" {
-  bucket = "${local.prefix}-lake"
-  tags   = local.tags
+  bucket        = "ducklake-${data.aws_caller_identity.current.account_id}"
+  force_destroy = true
+  tags          = local.tags
 }
 
 resource "aws_s3_bucket_versioning" "lake" {

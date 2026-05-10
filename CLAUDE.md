@@ -4,7 +4,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-xdata is a modern data engineering platform on AWS. Currently infrastructure-only (OpenTofu), with planned Python data pipeline layers (dlt, DuckLake/DuckDB, SQLMesh, Dagster, Soda, Cube.dev).
+A modern data engineering platform on AWS. Currently infrastructure-only (OpenTofu), with planned Python data pipeline layers (dlt, DuckLake/DuckDB, SQLMesh, Dagster, Soda, Cube.dev).
+
+One AWS account = one environment. Today: dev account only. Prod account is planned and will deploy the same module unchanged.
 
 ## Commands
 
@@ -30,18 +32,24 @@ OpenTofu tests: `infra/modules/app/tests/basic.tftest.hcl`
 
 **Infrastructure (`infra/`)**:
 - `modules/app/` — reusable module defining all AWS resources (RDS PostgreSQL catalog, S3 lake, VPC/security groups)
-- `live/` — environment deployment root that invokes the module. Backend config is injected at `tofu init` via `-backend-config`, not hardcoded (backend.tf is intentionally empty)
-- `config/` — per-environment variable files (`prod.tfvars`) and backend configs (`prod.s3.tfbackend`)
+- `live/` — deployment root that invokes the module. Backend config is injected at `tofu init` via `-backend-config`, not hardcoded (backend.tf is intentionally empty)
+- `config/` — per-account variable files (`dev.tfvars`) and backend configs (`dev.s3.tfbackend`)
+
+**Resource names** (no env prefix — the AWS account is the env):
+- RDS instance: `ducklake`
+- Database: `catalog`
+- Master user: `ducklake_admin` (RDS-managed master secret has all credentials)
+- S3 bucket: `ducklake-<aws-account-id>` (account ID provides global uniqueness)
+- State bucket: `tofu-state-<aws-account-id>`
 
 **Planned data flow** (see `docs/data_stack.md`):
 dlt → DuckLake (S3 + PostgreSQL) → DuckDB → SQLMesh → Cube.dev → consumers
 
-**CI/CD**: GitHub Actions with OIDC federation (no stored AWS credentials). Push to `main` with changes in `infra/**` triggers `tofu apply prod`.
+**CI/CD**: GitHub Actions with OIDC federation (no stored AWS credentials). Push to `main` with changes in `infra/**` triggers `tofu apply dev`. Release events will deploy to prod once that account exists.
 
 ## Conventions
 
-- **Resource naming**: `xdata-<env>-<resource>` (e.g., `xdata-prod-lake`)
-- **Tags**: All resources get `{env, project, managed}` tags
-- **Per-env behavior**: Use the `features` variable object, not `env == "prod"` conditionals
+- **Resource naming**: function-based, no env prefix. Uniqueness via account ID where needed (e.g., S3 buckets).
+- **Tags**: All resources get `{project = "ducklake", managed = "opentofu"}`.
 - **OpenTofu version**: v1.11.0
 - **Git**: Trunk-based development on `main`, imperative commit messages

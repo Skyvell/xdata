@@ -1,8 +1,8 @@
-# xdata
+# DuckLake
 
 Modern data engineering stack: `dlt → DuckLake (S3 + PostgreSQL) → SQLMesh on DuckDB → Cube.dev → LLM agents`. Orchestrated by Dagster, quality enforced by SQLMesh audits and Soda.
 
-See [docs/data_stack.md](docs/data_stack.md) for the full reference architecture.
+See [docs/data_stack.md](docs/data_stack.md) for the full reference architecture and [docs/mental_model.md](docs/mental_model.md) for the naming and resource model.
 
 ## Stack
 
@@ -35,12 +35,12 @@ See [docs/monorepo_structure.md](docs/monorepo_structure.md) for workspace wirin
 
 ## Infrastructure
 
-AWS — eu-north-1. Each environment (dev/int/prod) has its own S3 lake bucket and RDS PostgreSQL catalog.
+AWS — eu-north-1. One AWS account = one environment. Today: dev account only. Prod account is planned and will deploy the same module unchanged.
 
-**One-time bootstrap** (run from laptop with SSO credentials):
+**One-time bootstrap** (run from laptop with SSO credentials, once per AWS account):
 
 ```bash
-just bootstrap-state eu-north-1 xdata-tofu-state
+just bootstrap-state eu-north-1 tofu-state-<aws-account-id>
 ```
 
 **Deploy infra:**
@@ -48,12 +48,7 @@ just bootstrap-state eu-north-1 xdata-tofu-state
 Merges to `main` that touch `infra/` deploy automatically via GitHub Actions (OIDC, no stored credentials). To preview changes locally first:
 
 ```bash
-just tofu-plan prod
+just tofu-plan dev
 ```
 
 See [docs/opentofu_project_guide.md](docs/opentofu_project_guide.md).
-
-## TODO
-
-- [ ] Deploy infra (`tofu apply` prod)
-- [ ] CI/CD — `tofu plan` on PR

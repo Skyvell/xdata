@@ -1,76 +1,179 @@
-````markdown
 # DuckLake AWS Naming
+
+Keep the first setup simple:
+
+```text
+one AWS account = one DuckLake deployment
+```
+
+Multiple environments (dev, prod, ...) live in **separate AWS accounts**, each
+running this same module. The account boundary IS the environment.
 
 ## Resources
 
 ```text
 RDS instance:
-  ducklake-catalog
+  ducklake
 
 PostgreSQL database:
-  ducklake_catalog
+  metadata
 
-PostgreSQL schemas:
-  dev_ted
-  ci
-  prod
+PostgreSQL user:
+  ducklake_admin   (RDS-managed master; password in Secrets Manager)
 
 S3 bucket:
-  ducklake-data-<aws-account-id>
+  ducklake-<aws-account-id>
 
-S3 prefixes:
-  dev/ted/
-  ci/
-  prod/
-````
-
-## Terraform names
-
-```hcl
-data "aws_caller_identity" "current" {}
-
-resource "aws_db_instance" "ducklake_catalog" {
-  identifier = "ducklake-catalog"
-  db_name    = "ducklake_catalog"
-}
-
-resource "aws_s3_bucket" "ducklake_data" {
-  bucket = "ducklake-data-${data.aws_caller_identity.current.account_id}"
-}
+State bucket:
+  tofu-state-<aws-account-id>
 ```
 
 ## Mental model
 
+DuckLake has two parts:
+
 ```text
-DuckLake
-├── ducklake-catalog  = RDS/PostgreSQL catalog
-└── ducklake-data     = S3 Parquet data
+Catalogue metadata:
+  RDS/PostgreSQL  (database `metadata`)
+
+Table data:
+  S3 Parquet files  (bucket `ducklake-<account-id>`)
 ```
 
-## Isolation model
-
-Use one AWS account for now, with isolation by:
+Per AWS account:
 
 ```text
-PostgreSQL schema
-S3 prefix
+DuckLake (this account)
+├── Catalogue
+│   └── RDS instance: ducklake
+│       └── PostgreSQL database: metadata
+└── Data
+    └── S3 bucket: ducklake-<aws-account-id>
+```
+
+## Access model
+
+Start with one PostgreSQL user:
+
+```text
+ducklake_admin
+```
+
+RDS auto-creates this user as the master at instance creation. The password is
+stored in the RDS-managed Secrets Manager secret. Everything (dlt, SQLMesh,
+DuckDB UI, future Dagster/ECS) connects as this user.
+
+No bootstrap SQL needed — the database is auto-created and owned by
+`ducklake_admin` on first apply.
+
+## Python attach
+
+```python
+import duckdb
+
+con = duckdb.connect()
+
+con.sql("INSTALL ducklake")
+con.sql("INSTALL postgres")
+con.sql("INSTALL httpfs")
+
+con.sql("LOAD ducklake")
+con.sql("LOAD postgres")
+con.sql("LOAD httpfs")
+
+con.sql("""
+    CREATE OR REPLACE SECRET s3_ducklake (
+        TYPE s3,
+        PROVIDER credential_chain,
+        REGION 'eu-north-1'
+    );
+""")
+
+con.sql("""
+    ATTACH 'ducklake:postgres:host=<rds-endpoint> port=5432 dbname=metadata user=ducklake_admin password=<password> sslmode=require'
+    AS lake
+    (DATA_PATH 's3://ducklake-<aws-account-id>/');
+""")
+
+con.sql("USE lake")
+```
+
+## DuckLake schemas
+
+Use DuckLake schemas for data organization:
+
+```text
+raw
+staging
+marts
 ```
 
 Example:
 
+```sql
+CREATE SCHEMA raw;
+CREATE SCHEMA staging;
+CREATE SCHEMA marts;
+```
+
+## Future developer sandboxes
+
+If multiple developers write their own data inside the same dev account, add
+sandbox schemas:
+
 ```text
-Ted local dev:
-  PostgreSQL schema: dev_ted
-  S3 prefix: dev/ted/
-
-CI:
-  PostgreSQL schema: ci
-  S3 prefix: ci/
-
-Production:
-  PostgreSQL schema: prod
-  S3 prefix: prod/
+sandbox_ted
+sandbox_anna
+sandbox_ci
 ```
 
+Layout:
+
+```text
+metadata
+├── raw
+├── staging
+├── marts
+├── sandbox_ted
+├── sandbox_anna
+└── sandbox_ci
 ```
+
+Corresponding S3 layout:
+
+```text
+s3://ducklake-<aws-account-id>/
+├── raw/
+├── staging/
+├── marts/
+├── sandbox_ted/
+├── sandbox_anna/
+└── sandbox_ci/
+```
+
+## Later environments
+
+Add a new AWS account when you need a new environment:
+
+```text
+prod account → its own RDS `ducklake`, its own bucket `ducklake-<prod-account-id>`
+```
+
+Same module, same names. Account ID provides global S3 uniqueness. Tofu
+deploys identically across accounts.
+
+## Later role split
+
+Start with:
+
+```text
+ducklake_admin
+```
+
+Split only when needed:
+
+```text
+ducklake_admin
+ducklake_writer
+ducklake_reader
 ```
