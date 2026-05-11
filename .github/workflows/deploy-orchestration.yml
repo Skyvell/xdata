@@ -54,7 +54,7 @@ jobs:
       - name: Record image tag
         uses: dagster-io/dagster-cloud-action/actions/utils/dagster-cloud-cli@v1.13.4
         with:
-          command: "ci set-build-output --project-dir orchestration --location-name xdata --image-tag ${{ github.sha }}"
+          command: "ci set-build-output --location-name xdata --image-tag ${{ github.sha }}"
 
       - name: Deploy code location
         uses: dagster-io/dagster-cloud-action/actions/utils/dagster-cloud-cli@v1.13.4
