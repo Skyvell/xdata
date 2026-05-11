@@ -1,0 +1,26 @@
+instance_class:
+  module: dagster_cloud.instance
+  class: DagsterCloudAgentInstance
+
+dagster_cloud_api:
+  agent_token:
+    env: DAGSTER_CLOUD_AGENT_TOKEN
+  deployment: ${deployment}
+  branch_deployments: false
+
+user_code_launcher:
+  module: dagster_cloud.workspace.ecs
+  class: EcsUserCodeLauncher
+  config:
+    cluster: ${cluster_name}
+    subnets:
+%{ for s in subnet_ids ~}
+      - ${s}
+%{ endfor ~}
+    security_group_ids:
+      - ${security_group_id}
+    service_discovery_namespace_id: ${service_discovery_namespace_id}
+    execution_role_arn: ${execution_role_arn}
+    task_role_arn: ${task_role_arn}
+    log_group: ${log_group}
+    launch_type: FARGATE
