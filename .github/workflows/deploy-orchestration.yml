@@ -21,6 +21,7 @@ concurrency:
 env:
   AWS_REGION: eu-north-1
   DAGSTER_CLOUD_API_TOKEN: ${{ secrets.DAGSTER_CLOUD_API_TOKEN }}
+  DAGSTER_CLOUD_ORGANIZATION: tedskyvell
   DAGSTER_CLOUD_URL: https://tedskyvell.eu.dagster.plus
   DAGSTER_BUILD_STATEDIR: /tmp/dagster-build
 
