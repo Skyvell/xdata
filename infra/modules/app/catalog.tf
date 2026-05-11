@@ -24,6 +24,7 @@ resource "aws_db_instance" "catalog" {
   publicly_accessible                 = true
   multi_az                            = var.catalog_multi_az
   iam_database_authentication_enabled = true
+  apply_immediately                   = true
 
   backup_retention_period   = var.catalog_backup_retention_period
   skip_final_snapshot       = var.catalog_skip_final_snapshot
