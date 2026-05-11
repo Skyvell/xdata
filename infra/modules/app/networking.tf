@@ -48,7 +48,7 @@ resource "aws_vpc_security_group_ingress_rule" "dagster_self_grpc" {
   from_port                    = 4000
   to_port                      = 4000
   referenced_security_group_id = aws_security_group.dagster.id
-  description                  = "Agent -> code-location server gRPC"
+  description                  = "Agent to code-location server gRPC"
 }
 
 resource "aws_vpc_security_group_ingress_rule" "catalog_from_dagster" {
