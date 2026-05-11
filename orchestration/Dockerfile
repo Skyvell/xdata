@@ -11,7 +11,4 @@ COPY orchestration/ ./orchestration/
 RUN uv sync --frozen --no-dev
 
 ENV PATH="/opt/dagster/app/.venv/bin:$PATH" \
-    PYTHONUNBUFFERED=1 \
-    DAGSTER_HOME=/opt/dagster/dagster_home
-
-RUN mkdir -p $DAGSTER_HOME
+    PYTHONUNBUFFERED=1
