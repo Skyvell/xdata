@@ -3,3 +3,15 @@
 
 # Claude Code local state
 .claude/
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+.ruff_cache/
+
+# dlt local artifacts (only present if pipeline misconfigured to fall back to defaults)
+ducklake.sqlite
+ducklake.files/
