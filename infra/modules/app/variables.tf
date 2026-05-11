@@ -79,3 +79,27 @@ variable "dagster_agent_replicas" {
   description = "Number of Dagster agent replicas. 1 is fine for dev; prod should run 2."
   default     = 1
 }
+
+variable "dagster_server_cpu" {
+  type        = string
+  description = "Default Fargate CPU units for code-location server tasks the agent launches."
+  default     = "512"
+}
+
+variable "dagster_server_memory" {
+  type        = string
+  description = "Default Fargate memory (MiB) for code-location server tasks."
+  default     = "1024"
+}
+
+variable "dagster_run_cpu" {
+  type        = string
+  description = "Default Fargate CPU units for run tasks the agent launches per materialization."
+  default     = "1024"
+}
+
+variable "dagster_run_memory" {
+  type        = string
+  description = "Default Fargate memory (MiB) for run tasks."
+  default     = "2048"
+}

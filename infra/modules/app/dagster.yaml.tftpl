@@ -24,3 +24,9 @@ user_code_launcher:
     task_role_arn: ${task_role_arn}
     log_group: ${log_group}
     launch_type: FARGATE
+    server_resources:
+      cpu: "${server_cpu}"
+      memory: "${server_memory}"
+    run_resources:
+      cpu: "${run_cpu}"
+      memory: "${run_memory}"

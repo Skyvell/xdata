@@ -53,6 +53,10 @@ locals {
     execution_role_arn             = aws_iam_role.dagster_task_execution.arn
     task_role_arn                  = aws_iam_role.dagster_run.arn
     log_group                      = aws_cloudwatch_log_group.dagster_runs.name
+    server_cpu                     = var.dagster_server_cpu
+    server_memory                  = var.dagster_server_memory
+    run_cpu                        = var.dagster_run_cpu
+    run_memory                     = var.dagster_run_memory
   })
 }
 

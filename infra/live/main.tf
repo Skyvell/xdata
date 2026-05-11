@@ -17,6 +17,10 @@ module "app" {
   dagster_agent_cpu               = var.dagster_agent_cpu
   dagster_agent_memory            = var.dagster_agent_memory
   dagster_agent_replicas          = var.dagster_agent_replicas
+  dagster_server_cpu              = var.dagster_server_cpu
+  dagster_server_memory           = var.dagster_server_memory
+  dagster_run_cpu                 = var.dagster_run_cpu
+  dagster_run_memory              = var.dagster_run_memory
 }
 
 output "catalog_endpoint" { value = module.app.catalog_endpoint }

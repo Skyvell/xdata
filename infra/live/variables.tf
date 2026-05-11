@@ -80,3 +80,23 @@ variable "dagster_agent_replicas" {
   description = "Number of Dagster agent replicas."
   default     = 1
 }
+
+variable "dagster_server_cpu" {
+  type    = string
+  default = "512"
+}
+
+variable "dagster_server_memory" {
+  type    = string
+  default = "1024"
+}
+
+variable "dagster_run_cpu" {
+  type    = string
+  default = "1024"
+}
+
+variable "dagster_run_memory" {
+  type    = string
+  default = "2048"
+}
