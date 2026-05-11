@@ -2,7 +2,7 @@
 name = "xdata-ingestion"
 version = "0.0.0"
 description = "dlt pipelines for the xdata DuckLake."
-requires-python = ">=3.13"
+requires-python = ">=3.14"
 dependencies = [
     "dlt[ducklake]>=1.26",
     "boto3>=1.43",
