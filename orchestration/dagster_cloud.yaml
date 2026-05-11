@@ -2,3 +2,6 @@ locations:
   - location_name: xdata
     code_source:
       module_name: xdata_orchestration.defs
+    build:
+      directory: .
+      registry: ${ECR_REGISTRY}
