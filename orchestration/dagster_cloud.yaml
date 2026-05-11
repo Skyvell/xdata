@@ -5,3 +5,8 @@ locations:
     build:
       directory: .
       registry: 975050249037.dkr.ecr.eu-north-1.amazonaws.com/ducklake-orchestration
+    container_context:
+      ecs:
+        secrets:
+          - name: DAGSTER_CLOUD_AGENT_TOKEN
+            valueFrom: arn:aws:secretsmanager:eu-north-1:975050249037:secret:ducklake/dagster-cloud-agent-token-JLPuUA
