@@ -4,4 +4,4 @@ locations:
       module_name: xdata_orchestration.defs
     build:
       directory: .
-      registry: ${ECR_REGISTRY}
+      registry: 975050249037.dkr.ecr.eu-north-1.amazonaws.com/ducklake-orchestration

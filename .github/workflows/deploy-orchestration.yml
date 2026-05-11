@@ -40,9 +40,6 @@ jobs:
       - id: ecr
         uses: aws-actions/amazon-ecr-login@v2
 
-      - name: Export ECR registry path
-        run: echo "ECR_REGISTRY=${{ steps.ecr.outputs.registry }}/ducklake-orchestration" >> "$GITHUB_ENV"
-
       - name: Init Dagster Cloud build
         uses: dagster-io/dagster-cloud-action/actions/utils/dagster-cloud-cli@v1.13.4
         with:
