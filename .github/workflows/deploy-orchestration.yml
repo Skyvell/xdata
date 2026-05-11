@@ -62,4 +62,4 @@ jobs:
       - name: Deploy code location
         uses: dagster-io/dagster-cloud-action/actions/utils/dagster-cloud-cli@v1.13.4
         with:
-          command: "ci deploy --project-dir orchestration"
+          command: "ci deploy"
