@@ -9,55 +9,18 @@ on:
       - pyproject.toml
       - uv.lock
       - .github/workflows/deploy-orchestration.yml
+      - .github/workflows/_deploy-orchestration.yml
 
 permissions:
   id-token: write
   contents: read
 
-concurrency:
-  group: dagster-deploy-prod
-  cancel-in-progress: false
-
-env:
-  AWS_REGION: eu-north-1
-  DAGSTER_CLOUD_API_TOKEN: ${{ secrets.DAGSTER_CLOUD_API_TOKEN }}
-  DAGSTER_CLOUD_ORGANIZATION: tedskyvell
-  DAGSTER_CLOUD_URL: https://tedskyvell.eu.dagster.plus
-  DAGSTER_BUILD_STATEDIR: /tmp/dagster-build
-
 jobs:
+
+  # Merge to main → deploy dev (the only env in this account today).
+  # When the prod AWS account is added, a release event will deploy to prod.
   deploy:
-    runs-on: ubuntu-latest
-    environment: dev
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: aws-actions/configure-aws-credentials@v4
-        with:
-          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
-          aws-region: ${{ env.AWS_REGION }}
-
-      - id: ecr
-        uses: aws-actions/amazon-ecr-login@v2
-
-      - name: Init Dagster Cloud build
-        uses: dagster-io/dagster-cloud-action/actions/utils/dagster-cloud-cli@v1.13.4
-        with:
-          command: "ci init --project-dir orchestration --dagster-cloud-yaml-path dagster_cloud.yaml --deployment prod"
-
-      - uses: docker/build-push-action@v6
-        with:
-          context: .
-          file: orchestration/Dockerfile
-          push: true
-          tags: ${{ steps.ecr.outputs.registry }}/ducklake-orchestration:${{ github.sha }}
-
-      - name: Record image tag
-        uses: dagster-io/dagster-cloud-action/actions/utils/dagster-cloud-cli@v1.13.4
-        with:
-          command: "ci set-build-output --location-name xdata --image-tag ${{ github.sha }}"
-
-      - name: Deploy code location
-        uses: dagster-io/dagster-cloud-action/actions/utils/dagster-cloud-cli@v1.13.4
-        with:
-          command: "ci deploy"
+    uses: ./.github/workflows/_deploy-orchestration.yml
+    with:
+      environment: dev
+    secrets: inherit
