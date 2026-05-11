@@ -30,3 +30,7 @@ output "compute_role_arn" {
 output "dagster_url" {
   value = "https://${var.dagster_org_slug}.dagster.plus/${var.dagster_deployment}"
 }
+
+output "orchestration_image_repo" {
+  value = aws_ecr_repository.orchestration.repository_url
+}

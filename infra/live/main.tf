@@ -27,3 +27,4 @@ output "dagster_agent_role_arn" { value = module.app.dagster_agent_role_arn }
 output "dagster_run_role_arn" { value = module.app.dagster_run_role_arn }
 output "compute_role_arn" { value = module.app.compute_role_arn }
 output "dagster_url" { value = module.app.dagster_url }
+output "orchestration_image_repo" { value = module.app.orchestration_image_repo }
