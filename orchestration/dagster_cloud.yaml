@@ -10,3 +10,9 @@ locations:
         secrets:
           - name: DAGSTER_CLOUD_AGENT_TOKEN
             valueFrom: arn:aws:secretsmanager:eu-north-1:975050249037:secret:ducklake/dagster-cloud-agent-token-JLPuUA
+        server_resources:
+          cpu: "512"
+          memory: "1024"
+        run_resources:
+          cpu: "1024"
+          memory: "2048"
