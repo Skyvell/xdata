@@ -1,3 +1,4 @@
+# Code-location manifest read by dagster-cloud-cli during CI deploy.
 locations:
   - location_name: xdata
     code_source:
