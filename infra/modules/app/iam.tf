@@ -120,6 +120,8 @@ data "aws_iam_policy_document" "dagster_agent" {
       "servicediscovery:ListInstances",
       "servicediscovery:ListServices",
       "servicediscovery:ListTagsForResource",
+      "servicediscovery:TagResource",
+      "servicediscovery:UntagResource",
       "tag:GetResources",
     ]
     resources = ["*"]
