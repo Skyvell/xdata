@@ -156,9 +156,15 @@ data "aws_iam_policy_document" "dagster_run" {
   }
 
   statement {
-    sid       = "CatalogSecret"
-    actions   = ["secretsmanager:GetSecretValue"]
-    resources = [aws_db_instance.catalog.master_user_secret[0].secret_arn]
+    sid       = "RDSIAMAuth"
+    actions   = ["rds-db:connect"]
+    resources = ["arn:aws:rds-db:${var.region}:${data.aws_caller_identity.current.account_id}:dbuser:${aws_db_instance.catalog.resource_id}/ducklake_admin"]
+  }
+
+  statement {
+    sid       = "DescribeDB"
+    actions   = ["rds:DescribeDBInstances"]
+    resources = [aws_db_instance.catalog.arn]
   }
 }
 

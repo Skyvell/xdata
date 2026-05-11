@@ -21,8 +21,9 @@ resource "aws_db_instance" "catalog" {
   allocated_storage = 20
 
   # TODO: harden once we move to private RDS + SSM tunnel / VPC-only access.
-  publicly_accessible = true
-  multi_az            = var.catalog_multi_az
+  publicly_accessible                 = true
+  multi_az                            = var.catalog_multi_az
+  iam_database_authentication_enabled = true
 
   backup_retention_period   = var.catalog_backup_retention_period
   skip_final_snapshot       = var.catalog_skip_final_snapshot
