@@ -1,46 +1,31 @@
-"""DuckLake destination wired to the AWS catalog + lake bucket.
+"""DuckLake destination wired from runner-injected env vars.
 
-Authenticates to Postgres via RDS IAM authentication — `boto3` generates a
-short-lived auth token at runtime, no long-lived password is involved. The
-caller's IAM principal needs `rds-db:connect` on DB_USER.
+The scheduled-runner task definition injects DUCKLAKE_* env vars: HOST, PORT,
+DB, USER, PASSWORD (the latter two from the RDS-managed master secret),
+METADATA_SCHEMA, and DATA_PATH. S3 access uses the default AWS credential
+chain — the task role grants the needed S3 permissions.
 """
 
-import boto3
+import os
+
 from dlt.common.configuration.specs import ConnectionStringCredentials
 from dlt.destinations import ducklake
 from dlt.destinations.impl.ducklake.configuration import DuckLakeCredentials
 
-INSTANCE_ID = "ducklake"
-
-# TODO: switch to a dedicated app-level user once one exists in the catalog.
-# When you do, also update the rds-db:connect Resource ARN in
-# infra/modules/app/iam.tf to reference the new user.
-DB_USER = "ducklake_admin"
-
 
 def destination():
-    rds = boto3.client("rds")
-    sts = boto3.client("sts")
-
-    db = rds.describe_db_instances(DBInstanceIdentifier=INSTANCE_ID)["DBInstances"][0]
-    host = db["Endpoint"]["Address"]
-    port = db["Endpoint"]["Port"]
-    db_name = db["DBName"]
-
-    token = rds.generate_db_auth_token(DBHostname=host, Port=port, DBUsername=DB_USER)
-    account_id = sts.get_caller_identity()["Account"]
-
     return ducklake(
         credentials=DuckLakeCredentials(
+            metadata_schema=os.environ["DUCKLAKE_METADATA_SCHEMA"],
             catalog=ConnectionStringCredentials({
                 "drivername": "postgresql",
-                "host": host,
-                "port": port,
-                "username": DB_USER,
-                "password": token,
-                "database": db_name,
+                "host": os.environ["DUCKLAKE_HOST"],
+                "port": int(os.environ["DUCKLAKE_PORT"]),
+                "username": os.environ["DUCKLAKE_USER"],
+                "password": os.environ["DUCKLAKE_PASSWORD"],
+                "database": os.environ["DUCKLAKE_DB"],
                 "query": {"sslmode": "require"},
             }),
-            storage=f"s3://ducklake-{account_id}/",
+            storage=os.environ["DUCKLAKE_DATA_PATH"],
         )
     )
