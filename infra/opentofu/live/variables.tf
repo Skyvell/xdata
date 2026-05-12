@@ -39,3 +39,9 @@ variable "catalog_allowed_cidrs" {
   description = "CIDR blocks allowed inbound on the catalog RDS port."
   default     = []
 }
+
+variable "runner_image_tag" {
+  type        = string
+  description = "Container image tag for the scheduled runner. Updated by CI on each push."
+  default     = "latest"
+}
