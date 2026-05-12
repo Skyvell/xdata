@@ -1,0 +1,12 @@
+[project]
+name = "xdata-transform"
+version = "0.0.0"
+description = "SQLMesh project for the xdata DuckLake."
+requires-python = ">=3.14"
+dependencies = [
+    "sqlmesh>=0.234",
+    "psycopg2-binary>=2.9",
+]
+
+[tool.uv]
+package = false
