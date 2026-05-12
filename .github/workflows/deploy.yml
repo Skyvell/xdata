@@ -17,10 +17,3 @@ jobs:
     with:
       environment: dev
     secrets: inherit
-
-  deploy-orchestration:
-    needs: deploy-infrastructure
-    uses: ./.github/workflows/_deploy-orchestration.yml
-    with:
-      environment: dev
-    secrets: inherit
