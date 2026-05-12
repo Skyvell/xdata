@@ -1,9 +1,8 @@
-name: Deploy infrastructure
+name: Deploy
 
 on:
   push:
     branches: [main]
-    paths: [infra/**]
 
 permissions:
   id-token: write
@@ -13,8 +12,15 @@ jobs:
 
   # Merge to main → deploy dev (the only env in this account today).
   # When the prod AWS account is added, a release event will deploy to prod.
-  deploy:
+  deploy-infrastructure:
     uses: ./.github/workflows/_deploy-infrastructure.yml
+    with:
+      environment: dev
+    secrets: inherit
+
+  deploy-orchestration:
+    needs: deploy-infrastructure
+    uses: ./.github/workflows/_deploy-orchestration.yml
     with:
       environment: dev
     secrets: inherit
