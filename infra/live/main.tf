@@ -1,14 +1,43 @@
-module "app" {
-  source = "../modules/app"
+locals {
+  tags = {
+    project = "ducklake"
+    managed = "opentofu"
+  }
+}
+
+module "networking" {
+  source = "../modules/networking"
 
   region = var.region
+  tags   = local.tags
+}
 
+module "ducklake" {
+  source = "../modules/ducklake"
+
+  vpc_id     = module.networking.vpc_id
+  subnet_ids = module.networking.subnet_ids
+
+  allowed_cidrs                   = var.catalog_allowed_cidrs
   catalog_instance_class          = var.catalog_instance_class
   catalog_multi_az                = var.catalog_multi_az
   catalog_backup_retention_period = var.catalog_backup_retention_period
   catalog_skip_final_snapshot     = var.catalog_skip_final_snapshot
   catalog_deletion_protection     = var.catalog_deletion_protection
-  catalog_allowed_cidrs           = var.catalog_allowed_cidrs
+
+  tags = local.tags
+}
+
+module "dagster" {
+  source = "../modules/dagster"
+
+  region              = var.region
+  vpc_id              = module.networking.vpc_id
+  subnet_ids          = module.networking.subnet_ids
+  catalog_sg_id       = module.ducklake.catalog_sg_id
+  catalog_resource_id = module.ducklake.catalog_resource_id
+  catalog_arn         = module.ducklake.catalog_arn
+  lake_bucket_arn     = module.ducklake.lake_bucket_arn
 
   dagster_org_slug                = var.dagster_org_slug
   dagster_deployment              = var.dagster_deployment
@@ -21,14 +50,6 @@ module "app" {
   dagster_server_memory           = var.dagster_server_memory
   dagster_run_cpu                 = var.dagster_run_cpu
   dagster_run_memory              = var.dagster_run_memory
-}
 
-output "catalog_endpoint" { value = module.app.catalog_endpoint }
-output "catalog_master_secret_arn" { value = module.app.catalog_master_secret_arn }
-output "lake_bucket_name" { value = module.app.lake_bucket_name }
-output "dagster_cluster_name" { value = module.app.dagster_cluster_name }
-output "dagster_agent_role_arn" { value = module.app.dagster_agent_role_arn }
-output "dagster_run_role_arn" { value = module.app.dagster_run_role_arn }
-output "compute_role_arn" { value = module.app.compute_role_arn }
-output "dagster_url" { value = module.app.dagster_url }
-output "orchestration_image_repo" { value = module.app.orchestration_image_repo }
+  tags = local.tags
+}

@@ -1,7 +1,7 @@
 resource "aws_db_subnet_group" "catalog" {
   name       = "ducklake-catalog"
-  subnet_ids = data.aws_subnets.default.ids
-  tags       = local.tags
+  subnet_ids = var.subnet_ids
+  tags       = var.tags
 }
 
 resource "aws_db_instance" "catalog" {
@@ -31,5 +31,5 @@ resource "aws_db_instance" "catalog" {
   final_snapshot_identifier = "ducklake-final"
   deletion_protection       = var.catalog_deletion_protection
 
-  tags = local.tags
+  tags = var.tags
 }

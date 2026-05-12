@@ -1,3 +1,5 @@
+data "aws_caller_identity" "current" {}
+
 data "aws_iam_policy_document" "ecs_tasks_assume" {
   statement {
     actions = ["sts:AssumeRole"]
@@ -12,7 +14,7 @@ data "aws_iam_policy_document" "ecs_tasks_assume" {
 resource "aws_iam_role" "dagster_task_execution" {
   name               = "ducklake-dagster-task-execution"
   assume_role_policy = data.aws_iam_policy_document.ecs_tasks_assume.json
-  tags               = local.tags
+  tags               = var.tags
 }
 
 resource "aws_iam_role_policy_attachment" "dagster_task_execution_managed" {
@@ -44,7 +46,7 @@ resource "aws_iam_role_policy" "dagster_task_execution_extra" {
 resource "aws_iam_role" "dagster_agent" {
   name               = "ducklake-dagster-agent"
   assume_role_policy = data.aws_iam_policy_document.ecs_tasks_assume.json
-  tags               = local.tags
+  tags               = var.tags
 }
 
 data "aws_iam_policy_document" "dagster_agent" {
@@ -139,7 +141,7 @@ resource "aws_iam_role_policy" "dagster_agent" {
 resource "aws_iam_role" "dagster_run" {
   name               = "ducklake-dagster-run"
   assume_role_policy = data.aws_iam_policy_document.ecs_tasks_assume.json
-  tags               = local.tags
+  tags               = var.tags
 }
 
 data "aws_iam_policy_document" "dagster_run" {
@@ -152,21 +154,21 @@ data "aws_iam_policy_document" "dagster_run" {
       "s3:ListBucket",
     ]
     resources = [
-      aws_s3_bucket.lake.arn,
-      "${aws_s3_bucket.lake.arn}/*",
+      var.lake_bucket_arn,
+      "${var.lake_bucket_arn}/*",
     ]
   }
 
   statement {
     sid       = "RDSIAMAuth"
     actions   = ["rds-db:connect"]
-    resources = ["arn:aws:rds-db:${var.region}:${data.aws_caller_identity.current.account_id}:dbuser:${aws_db_instance.catalog.resource_id}/ducklake_admin"]
+    resources = ["arn:aws:rds-db:${var.region}:${data.aws_caller_identity.current.account_id}:dbuser:${var.catalog_resource_id}/ducklake_admin"]
   }
 
   statement {
     sid       = "DescribeDB"
     actions   = ["rds:DescribeDBInstances"]
-    resources = [aws_db_instance.catalog.arn]
+    resources = [var.catalog_arn]
   }
 }
 

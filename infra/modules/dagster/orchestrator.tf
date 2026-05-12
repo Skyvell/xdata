@@ -5,13 +5,13 @@ data "aws_secretsmanager_secret" "dagster_agent_token" {
 resource "aws_cloudwatch_log_group" "dagster_agent" {
   name              = "/ducklake/dagster/agent"
   retention_in_days = 30
-  tags              = local.tags
+  tags              = var.tags
 }
 
 resource "aws_cloudwatch_log_group" "dagster_runs" {
   name              = "/ducklake/dagster/runs"
   retention_in_days = 30
-  tags              = local.tags
+  tags              = var.tags
 }
 
 resource "aws_ecs_cluster" "dagster" {
@@ -22,7 +22,7 @@ resource "aws_ecs_cluster" "dagster" {
     value = "enabled"
   }
 
-  tags = local.tags
+  tags = var.tags
 }
 
 resource "aws_ecs_cluster_capacity_providers" "dagster" {
@@ -39,15 +39,15 @@ resource "aws_ecs_cluster_capacity_providers" "dagster" {
 resource "aws_service_discovery_private_dns_namespace" "dagster" {
   name        = "ducklake-dagster.local"
   description = "Service discovery namespace for Dagster code-location servers"
-  vpc         = data.aws_vpc.default.id
-  tags        = local.tags
+  vpc         = var.vpc_id
+  tags        = var.tags
 }
 
 locals {
   dagster_yaml = templatefile("${path.module}/dagster.yaml.tftpl", {
     deployment                     = var.dagster_deployment
     cluster_name                   = aws_ecs_cluster.dagster.name
-    subnet_ids                     = data.aws_subnets.default.ids
+    subnet_ids                     = var.subnet_ids
     security_group_id              = aws_security_group.dagster.id
     service_discovery_namespace_id = aws_service_discovery_private_dns_namespace.dagster.id
     execution_role_arn             = aws_iam_role.dagster_task_execution.arn
@@ -107,7 +107,7 @@ resource "aws_ecs_task_definition" "dagster_agent" {
     }
   }])
 
-  tags = local.tags
+  tags = var.tags
 }
 
 resource "aws_ecs_service" "dagster_agent" {
@@ -121,10 +121,10 @@ resource "aws_ecs_service" "dagster_agent" {
   deployment_maximum_percent         = 100
 
   network_configuration {
-    subnets          = data.aws_subnets.default.ids
+    subnets          = var.subnet_ids
     security_groups  = [aws_security_group.dagster.id]
     assign_public_ip = true
   }
 
-  tags = local.tags
+  tags = var.tags
 }

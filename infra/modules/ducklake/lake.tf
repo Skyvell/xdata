@@ -1,7 +1,9 @@
+data "aws_caller_identity" "current" {}
+
 resource "aws_s3_bucket" "lake" {
   bucket        = "ducklake-${data.aws_caller_identity.current.account_id}"
   force_destroy = true
-  tags          = local.tags
+  tags          = var.tags
 }
 
 resource "aws_s3_bucket_versioning" "lake" {
