@@ -1,0 +1,82 @@
+resource "aws_cloudwatch_log_group" "runner" {
+  name              = "/ducklake/runner"
+  retention_in_days = 30
+  tags              = var.tags
+}
+
+resource "aws_ecs_cluster" "runner" {
+  name = "ducklake-runner"
+  tags = var.tags
+}
+
+resource "aws_ecs_task_definition" "runner" {
+  family                   = "ducklake-runner"
+  requires_compatibilities = ["FARGATE"]
+  network_mode             = "awsvpc"
+  cpu                      = tostring(var.task_cpu)
+  memory                   = tostring(var.task_memory)
+
+  execution_role_arn = aws_iam_role.runner_execution.arn
+  task_role_arn      = aws_iam_role.runner_task.arn
+
+  runtime_platform {
+    operating_system_family = "LINUX"
+    cpu_architecture        = "X86_64"
+  }
+
+  container_definitions = jsonencode([{
+    name      = "runner"
+    image     = "${aws_ecr_repository.runner.repository_url}:${var.image_tag}"
+    essential = true
+    environment = [
+      { name = "AWS_REGION", value = var.region },
+      { name = "DUCKLAKE_BUCKET", value = var.lake_bucket_name },
+    ]
+    logConfiguration = {
+      logDriver = "awslogs"
+      options = {
+        awslogs-group         = aws_cloudwatch_log_group.runner.name
+        awslogs-region        = var.region
+        awslogs-stream-prefix = "runner"
+      }
+    }
+  }])
+
+  tags = var.tags
+}
+
+resource "aws_scheduler_schedule" "runner" {
+  for_each = var.schedules
+
+  name                = "ducklake-${each.key}"
+  group_name          = "default"
+  schedule_expression = each.value.schedule_expression
+  state               = "ENABLED"
+
+  flexible_time_window {
+    mode = "OFF"
+  }
+
+  target {
+    arn      = aws_ecs_cluster.runner.arn
+    role_arn = aws_iam_role.scheduler.arn
+
+    ecs_parameters {
+      task_definition_arn = aws_ecs_task_definition.runner.arn
+      launch_type         = "FARGATE"
+
+      network_configuration {
+        subnets          = var.subnet_ids
+        security_groups  = [aws_security_group.runner.id]
+        assign_public_ip = var.assign_public_ip
+      }
+    }
+
+    input = jsonencode({
+      containerOverrides = [{
+        name    = "runner"
+        command = each.value.command
+      }]
+    })
+  }
+}
