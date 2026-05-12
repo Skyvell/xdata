@@ -28,9 +28,35 @@ variable "catalog_arn" {
   description = "RDS ARN of the DuckLake catalog. Used to scope the rds:DescribeDBInstances IAM policy."
 }
 
-variable "lake_bucket_name" {
+variable "catalog_host" {
   type        = string
-  description = "Name of the S3 lake bucket. Exposed to the runner container as DUCKLAKE_BUCKET."
+  description = "DuckLake catalog hostname. Exposed to the runner container as DUCKLAKE_HOST."
+}
+
+variable "catalog_port" {
+  type        = number
+  description = "DuckLake catalog port. Exposed to the runner container as DUCKLAKE_PORT."
+}
+
+variable "catalog_db_name" {
+  type        = string
+  description = "DuckLake catalog database name. Exposed to the runner container as DUCKLAKE_DB."
+}
+
+variable "catalog_master_secret_arn" {
+  type        = string
+  description = "ARN of the RDS-managed master user secret. Individual JSON keys are injected as DUCKLAKE_USER / DUCKLAKE_PASSWORD."
+}
+
+variable "catalog_metadata_schema" {
+  type        = string
+  description = "DuckLake metadata schema name. Exposed to the runner container as DUCKLAKE_METADATA_SCHEMA."
+  default     = "ducklake"
+}
+
+variable "lake_data_path" {
+  type        = string
+  description = "S3 URI for the DuckLake data layer. Exposed to the runner container as DUCKLAKE_DATA_PATH."
 }
 
 variable "lake_bucket_arn" {

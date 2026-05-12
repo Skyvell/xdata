@@ -2,6 +2,18 @@ output "catalog_endpoint" {
   value = aws_db_instance.catalog.endpoint
 }
 
+output "catalog_address" {
+  value = aws_db_instance.catalog.address
+}
+
+output "catalog_port" {
+  value = aws_db_instance.catalog.port
+}
+
+output "catalog_db_name" {
+  value = aws_db_instance.catalog.db_name
+}
+
 output "catalog_master_secret_arn" {
   value = aws_db_instance.catalog.master_user_secret[0].secret_arn
 }
@@ -30,4 +42,9 @@ output "lake_bucket_name" {
 
 output "lake_bucket_arn" {
   value = aws_s3_bucket.lake.arn
+}
+
+output "lake_data_path" {
+  value       = "s3://${aws_s3_bucket.lake.bucket}/"
+  description = "S3 URI for the DuckLake data layer. Exposed to consumers as DUCKLAKE_DATA_PATH."
 }
