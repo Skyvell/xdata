@@ -15,3 +15,7 @@ __pycache__/
 # dlt local artifacts (only present if pipeline misconfigured to fall back to defaults)
 ducklake.sqlite
 ducklake.files/
+
+# SQLMesh local runtime
+transform/.cache/
+transform/logs/

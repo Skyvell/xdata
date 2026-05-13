@@ -1,3 +1,5 @@
+set positional-arguments := true
+
 # List available recipes.
 default:
     @just --list
@@ -22,10 +24,13 @@ tofu-apply env: (tofu-init env)
 tofu-destroy env: (tofu-init env)
     tofu -chdir=infra/opentofu/live destroy -var-file=../config/{{env}}.tfvars
 
-# Plan SQLMesh changes (no args = prod virtual env; pass `dev` etc. for a virtual env).
-sqlmesh-plan *args:
-    cd transform && uv run sqlmesh plan {{args}}
+# Patch sqlmesh's magics.py for Python 3.14 argparse compatibility.
+# Re-run after every `uv sync` that reinstalls sqlmesh. Mirrors the Dockerfile.
+patch-sqlmesh:
+    sed -i '' 's|type=t.Union\[bool, t.Iterable\[str\]\]|type=str|' \
+        .venv/lib/python3.14/site-packages/sqlmesh/magics.py
 
-# Plan and auto-apply.
-sqlmesh-apply *args:
-    cd transform && uv run sqlmesh plan --auto-apply {{args}}
+# Run any sqlmesh subcommand against the active AWS profile.
+# Usage: just sqlmesh plan dev --auto-apply
+@sqlmesh *args:
+    . ./scripts/load_env.sh && cd transform && set -x && uv run sqlmesh "$@"

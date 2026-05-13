@@ -6,4 +6,4 @@ metadata_backup_retention_period = 0
 metadata_skip_final_snapshot     = true
 metadata_deletion_protection     = false
 
-metadata_allowed_cidrs = ["217.119.174.244/32"]
+metadata_allowed_cidrs = ["217.119.174.244/32", "188.151.180.133/32"]
