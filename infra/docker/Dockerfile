@@ -6,6 +6,7 @@ WORKDIR /app
 
 COPY pyproject.toml uv.lock ./
 COPY ingestion/ ./ingestion/
+COPY transform/ ./transform/
 
 RUN uv sync --frozen --no-dev
 

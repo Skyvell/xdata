@@ -59,9 +59,11 @@ module "runner" {
   image_tag = var.runner_image_tag
 
   schedules = {
-    coingecko = {
+    daily = {
       schedule_expression = "rate(1 day)"
-      command             = ["python", "-m", "xdata_ingestion.pipeline"]
+      command = ["sh", "-c",
+        "python -m xdata_ingestion.pipeline && sqlmesh -p transform plan --auto-apply --no-prompts"
+      ]
     }
   }
 
