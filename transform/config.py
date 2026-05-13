@@ -14,21 +14,19 @@ from sqlmesh.core.config.connection import (
     PostgresConnectionConfig,
 )
 
+# SQLMesh embeds the DuckLake ATTACH path in a single-quoted SQL literal
+# without escaping it, so inlining a password (which libpq's own quoting
+# would wrap in single quotes) breaks the outer SQL. Pass the password to
+# libpq via its standard env var instead and leave the DSN credential-free.
+os.environ["PGPASSWORD"] = os.environ["DUCKLAKE_PASSWORD"]
+
 
 def _create_metadata_connection_string() -> str:
-    """Return a libpq DSN for DuckLake's ATTACH path.
-
-    DuckLake's `ATTACH 'ducklake:postgres:...'` parses the inner connection
-    string as libpq key=value pairs, not as a URL — a `postgres://` URL is
-    interpreted as a filesystem path and the attach fails.
-    """
-    password = os.environ["DUCKLAKE_PASSWORD"].replace("\\", "\\\\").replace("'", "\\'")
     return (
         f"postgres:dbname={os.environ['DUCKLAKE_DB']} "
         f"host={os.environ['DUCKLAKE_HOST']} "
         f"port={os.environ['DUCKLAKE_PORT']} "
         f"user={os.environ['DUCKLAKE_USER']} "
-        f"password='{password}' "
         f"sslmode=require"
     )
 
