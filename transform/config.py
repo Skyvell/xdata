@@ -1,8 +1,10 @@
 """SQLMesh project config wired from runner-injected env vars.
 
-The scheduled-runner contract supplies DUCKLAKE_HOST/PORT/DB/USER/PASSWORD/
-METADATA_SCHEMA/DATA_PATH. SQLMesh state lives in the same Postgres instance
-as the DuckLake catalog (database 'metadata'), under schema 'sqlmesh'.
+Postgres connection params follow libpq's standard env var names
+(PGHOST/PGPORT/PGDATABASE/PGUSER/PGPASSWORD); DuckLake-specific values
+(DUCKLAKE_METADATA_SCHEMA, DUCKLAKE_DATA_PATH) keep their own prefix.
+SQLMesh state lives in the same Postgres instance as the DuckLake catalog,
+under schema 'sqlmesh'.
 """
 
 import os
@@ -14,19 +16,20 @@ from sqlmesh.core.config.connection import (
     PostgresConnectionConfig,
 )
 
-# SQLMesh embeds the DuckLake ATTACH path in a single-quoted SQL literal
-# without escaping it, so inlining a password (which libpq's own quoting
-# would wrap in single quotes) breaks the outer SQL. Pass the password to
-# libpq via its standard env var instead and leave the DSN credential-free.
-os.environ["PGPASSWORD"] = os.environ["DUCKLAKE_PASSWORD"]
-
 
 def _create_metadata_connection_string() -> str:
+    """Return a credential-free libpq DSN for DuckLake's ATTACH path.
+
+    SQLMesh embeds this in a single-quoted SQL literal without escaping it,
+    so inlining a password would break the outer SQL when libpq's own quoting
+    introduces single quotes. The password is supplied to libpq via PGPASSWORD
+    in the runner's task env instead.
+    """
     return (
-        f"postgres:dbname={os.environ['DUCKLAKE_DB']} "
-        f"host={os.environ['DUCKLAKE_HOST']} "
-        f"port={os.environ['DUCKLAKE_PORT']} "
-        f"user={os.environ['DUCKLAKE_USER']} "
+        f"postgres:dbname={os.environ['PGDATABASE']} "
+        f"host={os.environ['PGHOST']} "
+        f"port={os.environ['PGPORT']} "
+        f"user={os.environ['PGUSER']} "
         f"sslmode=require"
     )
 
@@ -35,7 +38,16 @@ config = Config(
     gateways={
         "dev": GatewayConfig(
             connection=DuckDBConnectionConfig(
-                extensions=["ducklake"],
+                extensions=["ducklake", "httpfs"],
+                # DuckDB's httpfs extension doesn't use the AWS credential
+                # chain by default; this secret tells it to read creds from
+                # the Fargate task role (and any standard AWS env vars).
+                secrets={
+                    "s3_default": {
+                        "TYPE": "S3",
+                        "PROVIDER": "credential_chain",
+                    },
+                },
                 catalogs={
                     "ducklake": DuckDBAttachOptions(
                         type="ducklake",
@@ -46,11 +58,11 @@ config = Config(
                 },
             ),
             state_connection=PostgresConnectionConfig(
-                host=os.environ["DUCKLAKE_HOST"],
-                port=int(os.environ["DUCKLAKE_PORT"]),
-                user=os.environ["DUCKLAKE_USER"],
-                password=os.environ["DUCKLAKE_PASSWORD"],
-                database=os.environ["DUCKLAKE_DB"],
+                host=os.environ["PGHOST"],
+                port=int(os.environ["PGPORT"]),
+                user=os.environ["PGUSER"],
+                password=os.environ["PGPASSWORD"],
+                database=os.environ["PGDATABASE"],
                 sslmode="require",
             ),
             state_schema=os.environ.get("SQLMESH_STATE_SCHEMA", "sqlmesh"),

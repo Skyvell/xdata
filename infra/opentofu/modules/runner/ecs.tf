@@ -30,15 +30,15 @@ resource "aws_ecs_task_definition" "runner" {
     essential = true
     environment = [
       { name = "AWS_REGION", value = var.region },
-      { name = "DUCKLAKE_HOST", value = var.catalog_host },
-      { name = "DUCKLAKE_PORT", value = tostring(var.catalog_port) },
-      { name = "DUCKLAKE_DB", value = var.catalog_db_name },
+      { name = "PGHOST", value = var.catalog_host },
+      { name = "PGPORT", value = tostring(var.catalog_port) },
+      { name = "PGDATABASE", value = var.catalog_db_name },
       { name = "DUCKLAKE_METADATA_SCHEMA", value = var.catalog_metadata_schema },
       { name = "DUCKLAKE_DATA_PATH", value = var.lake_data_path },
     ]
     secrets = [
-      { name = "DUCKLAKE_USER", valueFrom = "${var.catalog_master_secret_arn}:username::" },
-      { name = "DUCKLAKE_PASSWORD", valueFrom = "${var.catalog_master_secret_arn}:password::" },
+      { name = "PGUSER", valueFrom = "${var.catalog_master_secret_arn}:username::" },
+      { name = "PGPASSWORD", valueFrom = "${var.catalog_master_secret_arn}:password::" },
     ]
     logConfiguration = {
       logDriver = "awslogs"

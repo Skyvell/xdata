@@ -30,22 +30,22 @@ variable "catalog_arn" {
 
 variable "catalog_host" {
   type        = string
-  description = "DuckLake catalog hostname. Exposed to the runner container as DUCKLAKE_HOST."
+  description = "DuckLake catalog hostname. Exposed to the runner container as PGHOST."
 }
 
 variable "catalog_port" {
   type        = number
-  description = "DuckLake catalog port. Exposed to the runner container as DUCKLAKE_PORT."
+  description = "DuckLake catalog port. Exposed to the runner container as PGPORT."
 }
 
 variable "catalog_db_name" {
   type        = string
-  description = "DuckLake catalog database name. Exposed to the runner container as DUCKLAKE_DB."
+  description = "DuckLake catalog database name. Exposed to the runner container as PGDATABASE."
 }
 
 variable "catalog_master_secret_arn" {
   type        = string
-  description = "ARN of the RDS-managed master user secret. Individual JSON keys are injected as DUCKLAKE_USER / DUCKLAKE_PASSWORD."
+  description = "ARN of the RDS-managed master user secret. Individual JSON keys are injected as PGUSER / PGPASSWORD."
 }
 
 variable "catalog_metadata_schema" {
