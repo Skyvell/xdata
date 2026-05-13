@@ -29,6 +29,7 @@ config = Config(
     gateways={
         "dev": GatewayConfig(
             connection=DuckDBConnectionConfig(
+                extensions=["ducklake"],
                 catalogs={
                     "ducklake": DuckDBAttachOptions(
                         type="ducklake",
