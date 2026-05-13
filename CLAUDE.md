@@ -36,9 +36,9 @@ OpenTofu tests: `infra/modules/app/tests/basic.tftest.hcl`
 - `config/` — per-account variable files (`dev.tfvars`) and backend configs (`dev.s3.tfbackend`)
 
 **Resource names** (no env prefix — the AWS account is the env):
-- RDS instance: `ducklake`
-- Database: `catalog`
-- Master user: `ducklake_admin` (RDS-managed master secret has all credentials)
+- RDS instance: `metadata`
+- Database: `metadata`
+- Master user: `metadata_admin` (RDS-managed master secret has all credentials)
 - S3 bucket: `ducklake-<aws-account-id>` (account ID provides global uniqueness)
 - State bucket: `tofu-state-<aws-account-id>`
 

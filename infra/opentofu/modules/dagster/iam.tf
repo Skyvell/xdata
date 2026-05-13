@@ -162,7 +162,7 @@ data "aws_iam_policy_document" "dagster_run" {
   statement {
     sid       = "RDSIAMAuth"
     actions   = ["rds-db:connect"]
-    resources = ["arn:aws:rds-db:${var.region}:${data.aws_caller_identity.current.account_id}:dbuser:${var.catalog_resource_id}/ducklake_admin"]
+    resources = ["arn:aws:rds-db:${var.region}:${data.aws_caller_identity.current.account_id}:dbuser:${var.catalog_resource_id}/metadata_admin"]
   }
 
   statement {

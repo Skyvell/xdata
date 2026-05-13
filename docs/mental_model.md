@@ -13,13 +13,13 @@ running this same module. The account boundary IS the environment.
 
 ```text
 RDS instance:
-  ducklake
+  metadata
 
 PostgreSQL database:
   metadata
 
 PostgreSQL user:
-  ducklake_admin   (RDS-managed master; password in Secrets Manager)
+  metadata_admin   (RDS-managed master; password in Secrets Manager)
 
 S3 bucket:
   ducklake-<aws-account-id>
@@ -45,7 +45,7 @@ Per AWS account:
 ```text
 DuckLake (this account)
 ├── Catalogue
-│   └── RDS instance: ducklake
+│   └── RDS instance: metadata
 │       └── PostgreSQL database: metadata
 └── Data
     └── S3 bucket: ducklake-<aws-account-id>
@@ -56,7 +56,7 @@ DuckLake (this account)
 Start with one PostgreSQL user:
 
 ```text
-ducklake_admin
+metadata_admin
 ```
 
 RDS auto-creates this user as the master at instance creation. The password is
@@ -64,7 +64,7 @@ stored in the RDS-managed Secrets Manager secret. Everything (dlt, SQLMesh,
 DuckDB UI, future Dagster/ECS) connects as this user.
 
 No bootstrap SQL needed — the database is auto-created and owned by
-`ducklake_admin` on first apply.
+`metadata_admin` on first apply.
 
 ## Python attach
 
@@ -90,13 +90,19 @@ con.sql("""
 """)
 
 con.sql("""
-    ATTACH 'ducklake:postgres:host=<rds-endpoint> port=5432 dbname=metadata user=ducklake_admin password=<password> sslmode=require'
+    ATTACH 'ducklake:postgres:sslmode=require'
     AS lake
-    (DATA_PATH 's3://ducklake-<aws-account-id>/');
+    (DATA_PATH 's3://ducklake-<aws-account-id>/', METADATA_SCHEMA 'ducklake');
 """)
 
 con.sql("USE lake")
 ```
+
+The DSN omits host/db/user/password — libpq reads them from standard env vars
+(`PGHOST`, `PGPORT`, `PGDATABASE`, `PGUSER`, `PGPASSWORD`), which the runner's
+task definition injects from the RDS-managed master secret. Keeping creds out
+of the SQL literal also dodges a SQLMesh quoting bug where the ATTACH path
+isn't escaped before being embedded in a single-quoted string literal.
 
 ## DuckLake schemas
 
@@ -167,13 +173,13 @@ deploys identically across accounts.
 Start with:
 
 ```text
-ducklake_admin
+metadata_admin
 ```
 
 Split only when needed:
 
 ```text
-ducklake_admin
+metadata_admin
 ducklake_writer
 ducklake_reader
 ```
