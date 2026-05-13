@@ -5,6 +5,11 @@ locals {
   }
 }
 
+moved {
+  from = module.scheduled_runner
+  to   = module.runner
+}
+
 module "networking" {
   source = "../modules/networking"
 
@@ -34,8 +39,8 @@ module "lake" {
   tags = local.tags
 }
 
-module "scheduled_runner" {
-  source = "../modules/scheduled-runner"
+module "runner" {
+  source = "../modules/runner"
 
   region     = var.region
   vpc_id     = module.networking.vpc_id

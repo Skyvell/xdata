@@ -11,5 +11,5 @@ output "lake_bucket_name" {
 }
 
 output "runner_repository_url" {
-  value = module.scheduled_runner.runner_repository_url
+  value = module.runner.runner_repository_url
 }
