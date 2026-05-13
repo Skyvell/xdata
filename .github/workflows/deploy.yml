@@ -17,3 +17,9 @@ jobs:
     with:
       environment: dev
     secrets: inherit
+
+  deploy-runner:
+    uses: ./.github/workflows/_deploy-runner.yml
+    with:
+      environment: dev
+    secrets: inherit
