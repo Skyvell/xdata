@@ -6,7 +6,6 @@ as the DuckLake catalog (database 'metadata'), under schema 'sqlmesh'.
 """
 
 import os
-from urllib.parse import quote
 
 from sqlmesh.core.config import Config, GatewayConfig, ModelDefaultsConfig
 from sqlmesh.core.config.connection import (
@@ -17,12 +16,21 @@ from sqlmesh.core.config.connection import (
 
 
 def _create_metadata_connection_string() -> str:
-    user = quote(os.environ["DUCKLAKE_USER"], safe="")
-    password = quote(os.environ["DUCKLAKE_PASSWORD"], safe="")
-    host = os.environ["DUCKLAKE_HOST"]
-    port = os.environ["DUCKLAKE_PORT"]
-    db = os.environ["DUCKLAKE_DB"]
-    return f"postgres://{user}:{password}@{host}:{port}/{db}"
+    """Return a libpq DSN for DuckLake's ATTACH path.
+
+    DuckLake's `ATTACH 'ducklake:postgres:...'` parses the inner connection
+    string as libpq key=value pairs, not as a URL — a `postgres://` URL is
+    interpreted as a filesystem path and the attach fails.
+    """
+    password = os.environ["DUCKLAKE_PASSWORD"].replace("\\", "\\\\").replace("'", "\\'")
+    return (
+        f"postgres:dbname={os.environ['DUCKLAKE_DB']} "
+        f"host={os.environ['DUCKLAKE_HOST']} "
+        f"port={os.environ['DUCKLAKE_PORT']} "
+        f"user={os.environ['DUCKLAKE_USER']} "
+        f"password='{password}' "
+        f"sslmode=require"
+    )
 
 
 config = Config(
