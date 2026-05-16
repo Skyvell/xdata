@@ -65,12 +65,10 @@ Xdata is a lightweight lakehouse built around an agent-friendly access layer. A 
 
 ## Pre-requisites
 
-- `tofu` v1.11.0
-- `just`
-- `uv`
-- Docker
-- `aws` CLI
-- `jq`
+Install pre-requisites:
+```bash
+brew install opentofu just uv awscli jq
+```
 
 ## Infrastructure
 
