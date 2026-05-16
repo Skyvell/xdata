@@ -72,10 +72,9 @@ brew install opentofu just uv awscli jq
 
 ## Infrastructure
 
-One-time per AWS account — creates the S3 bucket that holds OpenTofu state:
-
+Create opentofu state bucket:
 ```bash
-just bootstrap-state <region> tofu-state-<aws-account-id>
+just bootstrap-state eu-north-1 tofu-state-$(aws sts get-caller-identity --query Account --output text)
 ```
 
 ## Local development
