@@ -1,309 +1,96 @@
-# Modern Data Engineering Stack — April 2026
-
-Reference architecture:
+# Data stack — 2026
 
 ```
-dlt → DuckLake (S3 + PostgreSQL) → SQLMesh on DuckDB → Cube.dev → LLM agents
+dlt → DuckLake (S3 + PostgreSQL) → DuckDB → SQLMesh → MCP server → {chat agent, Marimo}
 ```
 
-Orchestrated by Dagster. Quality enforced by SQLMesh audits and Soda.
+The MCP server is the primary consumer interface. Chat agents (Claude.ai, Claude Desktop, Cursor today; a custom UI later) and Marimo notebooks are clients of it.
 
----
+## Design principles
 
-## 1. Ingestion — dlt
+- **Code-only authoring surfaces.** Every layer is configured by files in git. No GUI-driven config, no console clicks.
+- **Agent-coherent format per surface.** Python where the surface is logic; Markdown + SQL where the surface is reports; never bespoke JS business logic.
+- **One AWS account = one environment.** Account boundary IS the environment; the same module deploys to dev and prod unchanged.
+- **MCP as the primary consumer interface.** Ad-hoc analytics flows through chat agents over MCP, not through a dashboard tool.
+- **Defer complexity until justified.** Each deferred layer has a falsifiable graduation criterion (see § Deferred layers).
 
-Python-native ELT. Extracts from APIs, databases, and files; loads into DuckLake. Handles pagination, retries, incremental cursors, and schema inference/evolution on write. Pipelines are Python files in Git — no separate connector infrastructure.
+## Layers
 
-```python
-import dlt
+### 1. Ingestion — dlt
 
-@dlt.resource(write_disposition="merge", primary_key="id")
-def orders():
-    yield from paginated_api_call("/orders")
+Python-native ELT. Resources are decorated Python generators; dlt handles pagination, retries, incremental cursors, schema inference and schema evolution on write. Configured by pyproject extras (`dlt[ducklake]`) and a destination set to `ducklake`. Earned its place because ingestion logic lives as Python in the same workspace as the rest of the stack — no separate connector platform, no GUI definitions.
 
-pipeline = dlt.pipeline(
-    pipeline_name="my_pipeline",
-    destination="ducklake",
-    dataset_name="raw",
-)
-pipeline.run(orders())
-```
+### 2. Storage — DuckLake on S3 + PostgreSQL
 
-| Setting | Value |
+Catalog metadata (schemas, snapshots, file locations, column statistics) in PostgreSQL on RDS; data files as Parquet on S3. Replaces Iceberg + Glue: queries that would require multiple S3 round-trips for manifest resolution become a single SQL query against the catalog. Small writes are held in the catalog and compacted to Parquet on threshold, avoiding the small-file problem. ACID, schema evolution, time travel, and multi-table atomic commits are catalog transactions. Bidirectional Iceberg import/export keeps the exit path open.
+
+### 3. Compute — DuckDB
+
+Single-process query engine. Reads DuckLake natively via the `ducklake` extension; attaches with a libpq DSN so postgres credentials come from `PGHOST` / `PGPORT` / `PGDATABASE` / `PGUSER` / `PGPASSWORD` rather than being embedded in the SQL literal. S3 access uses the AWS credential chain. Earned its place because in-process compute fits the working set: one node, no cluster.
+
+### 4. Transformation — SQLMesh
+
+Models are SQL files annotated with `MODEL()` blocks declaring kind, grain, and inline audits. SQLMesh parses SQL for column-level lineage and categorizes changes as breaking or forward-only; non-breaking changes apply without reprocessing history. Virtual environments test changes against production data without copying tables. Plan / apply workflow is analogous to OpenTofu. Earned its place over dbt because virtual envs and column-level lineage are first-class, not bolted on.
+
+### 5. Quality — SQLMesh audits
+
+Audits (`not_null`, `unique_values`, `accepted_range`, custom) are declared inline on models and run on `plan` / `apply`, blocking deploys on failure. Sufficient at this stage; freshness anomaly detection and schema-drift monitoring on upstream tables remain a deferred concern.
+
+### 6. Orchestration — ECS scheduled task
+
+A single Fargate task (`ducklake-runner`) runs dlt then SQLMesh sequentially, scheduled by EventBridge. Container image is built and pushed by CI. Environment variables (libpq `PG*` from the RDS-managed secret, `DUCKLAKE_*` and `AWS_REGION` from task definition) are injected at start. Sufficient for one source on one schedule; deliberately not Dagster yet.
+
+### 7. Consumer interface — MCP server (planned)
+
+A Python MCP server exposing four classes of tool to LLM agents: schema introspection over DuckLake catalogs, SQL execution against SQLMesh marts, freshness and lineage metadata pulled from SQLMesh state, and model documentation pulled from `MODEL()` descriptions. Connection params follow the same libpq convention as the runner. Earned its place as the primary consumer interface because ad-hoc analytics is moving from dashboard navigation to chat-driven querying; MCP is the emerging standard for that interface.
+
+### 8. Exploration — Marimo (planned)
+
+Reactive notebooks stored as plain `.py` files (not JSON), so they diff cleanly and agents can author them directly. Used for code-heavy investigations the agent and human iterate on together via Cursor or Claude Desktop. Replaces Jupyter; the file format is the load-bearing improvement.
+
+## Agent usage patterns
+
+| Usage | Path |
 |---|---|
-| Destination | `ducklake` — `pip install "dlt[ducklake]"` |
-| Write Disposition | `append`, `replace`, `merge` (Type 1), `scd2` (Type 2) |
-| Incremental | Cursor-based and merge-based |
-| File Format | Parquet |
-| Schema Contracts | Enforce or evolve on write |
-| Sources | 200+ verified connectors |
+| Ad-hoc question ("how did X trend last quarter?") | Chat agent → MCP `query` against `marts.*` → answer with cited mart and inline chart spec. |
+| Definition lookup ("what's our churn definition?") | Chat agent → MCP `describe_model` → SQLMesh model description and lineage. |
+| Freshness check ("is the orders feed current?") | Chat agent → MCP `freshness` → SQLMesh last-run timestamp + upstream dlt pipeline metadata. |
+| Iterative investigation | Analyst opens Marimo; agent scaffolds queries in the same file; human iterates on the resulting Python. |
+| Recurring canonical view | Out of scope today; chat agent rerun covers the same need until graduation criteria for Evidence are met. |
 
----
+## Deferred layers
 
-## 2. Storage & Table Format — DuckLake on S3 + PostgreSQL
-
-Parquet data files on S3, all table metadata (schemas, column statistics, file locations, snapshots) in PostgreSQL. Replaces Iceberg + Glue Catalog — the catalog *is* the metadata, so no manifest files or snapshot JSONs on object storage. Queries that need multiple S3 round-trips under Iceberg become a single SQL query against PostgreSQL.
-
-ACID, schema evolution, time travel, and multi-table atomic commits are catalog transactions. Small writes are held in the catalog and compacted to Parquet on threshold flush — avoids the small-file problem common to streaming. Bidirectional Iceberg import/export for engines without a native connector.
-
-```sql
-INSTALL ducklake;
-LOAD ducklake;
-
-ATTACH 'postgres:dbname=ducklake_catalog host=my-rds.amazonaws.com'
-  AS my_lake (TYPE ducklake, DATA_PATH 's3://my-datalake/warehouse/');
-
-SELECT * FROM my_lake.raw.orders AT (TIMESTAMP => '2026-03-01');
-```
-
-S3 layout — data files only, no metadata:
-
-```
-s3://my-datalake/warehouse/
-  ├── raw/orders/       → Parquet
-  ├── staging/stg_*     → Parquet
-  └── marts/fct_*       → Parquet
-```
-
-| Setting | Value |
-|---|---|
-| Catalog Backend | PostgreSQL on RDS (~$15/month for db.t4g.micro) |
-| Data Storage | S3 Standard (~$0.023/GB/month) |
-| Data Format | Parquet with Snappy/Zstd compression |
-| Data Inlining | Small writes held in PostgreSQL, compacted to S3 on threshold |
-| Iceberg Interop | Bidirectional import/export |
-
----
-
-## 3. Compute — DuckDB
-
-DuckDB is the only query engine. It runs in-process and reads DuckLake natively via the `ducklake` extension. Every environment is on AWS — there is no local data stack — and each has its own RDS Postgres catalog and S3 bucket.
-
-| Env | Catalog | Files |
+| Layer | Role when graduated | Graduation criterion |
 |---|---|---|
-| Dev | RDS Postgres (dev) | `s3://lake-dev/` |
-| Int | RDS Postgres (int) | `s3://lake-int/` |
-| Prod | RDS Postgres (prod) | `s3://lake-prod/` |
+| Dagster | Asset-based orchestration | ≥2 sources on different schedules, cross-system dependencies, per-asset freshness SLAs, or event-driven triggers. IAM scaffolding already in place. |
+| Soda | Data quality observability | SQLMesh audits insufficient — need freshness anomaly detection on the landing zone or schema-drift monitoring on tables the team doesn't own. |
+| Evidence.dev | Code-defined static dashboards | The same stakeholder asks the same question on a recurring schedule. Markdown + SQL remains the right authoring surface. |
+| Custom chat UI | Stakeholder-facing analytics UI | Outgrowing Claude.ai / Cursor / Desktop — embedding in a product, custom auth, or org-controlled chat history. |
+| Reverse ETL (Census / Hightouch) | Push curated marts back to ops systems | A downstream operational system requires curated marts as an input. |
+| Dedicated semantic layer | Metric definition governance | Metric drift across multiple consumers becomes a real problem. Evaluate SQLMesh metrics, MetricFlow, or BSL — not Cube. |
 
-SQLMesh virtual environments handle previews *within* an env without copying data; promotion *across* envs is `sqlmesh plan <env> --apply` from CI.
+## Non-choices
 
-Single-node ceiling: ~10 TB working set or tens of concurrent heavy queries. Beyond that, export the catalog to Iceberg and run Trino or Spark against the same S3 data.
+- **Cube** — semantic layer with JS as the *business-logic* surface. Rejected: violates the agent-coherent-surface principle, semantic-layer field is still settling, zero current consumers justify the complexity. MCP over SQLMesh marts covers the agent interface today.
+- **Iceberg + Glue** — more mature ecosystem than DuckLake but trades bleeding-edge ergonomics for breadth that this project doesn't need. DuckLake already deployed; Iceberg export remains the documented exit path.
+- **dbt / dbt Fusion** — larger community than SQLMesh but lacks first-class virtual environments and column-level lineage; loses against SQLMesh on the dimensions that matter for an agent-driven future.
+- **Streamlit / Plotly Dash** — Python dashboards, but reactive Python is a worse authoring surface for stakeholder reports than Markdown + SQL would be. Evidence wins that role when it graduates.
+- **Observable Framework** — strongest dataviz of the code-defined options but requires writing JS for custom charts; reconsider only if dataviz quality becomes a differentiator.
+- **Rill Data** — DuckDB-native YAML BI, promising; less mature than Evidence at the point this decision is made.
+- **Sling** — Go-based ELT; loses Python-native coherence vs. dlt.
+- **Prefect** — viable Dagster alternative; sticking with Dagster because its IAM is already scaffolded in this project.
 
----
+## Ceiling and exit
 
-## 4. Transformation — SQLMesh
+DuckDB is a single process: degrades past roughly 10 TB working set or tens of concurrent heavy queries. Exit path is to export the DuckLake catalog to Iceberg and run Trino or Spark against the same S3 data — Parquet files do not move.
 
-`MODEL()` blocks declare kind (full refresh, incremental by time, etc.), grain, and inline audits. SQLMesh parses SQL for column-level lineage and categorizes changes as breaking or non-breaking — non-breaking changes apply forward-only, no history reprocessing. Virtual environments test changes against production data without copying tables or recomputing downstream.
+## Cost floor (current reality)
 
-Plan/apply workflow analogous to OpenTofu. DuckDB native; import existing dbt projects with `sqlmesh init --dbt`.
-
-```sql
--- models/marts/fct_revenue.sql
-MODEL (
-  name marts.fct_revenue,
-  kind INCREMENTAL_BY_TIME_RANGE (
-    time_column order_date,
-    batch_size 7,  -- backfill 7 days per batch
-  ),
-  grain (order_id),
-  audits (
-    accepted_range(column=revenue, min_v=0),
-    not_null(columns=[order_id, customer_id]),
-  ),
-);
-
-SELECT
-    o.order_id,
-    o.order_date,
-    c.customer_segment,
-    SUM(o.amount) AS revenue
-FROM staging.stg_orders AS o
-JOIN staging.stg_customers AS c USING (customer_id)
-WHERE o.order_date BETWEEN @start_date AND @end_date
-GROUP BY 1, 2, 3;
-```
-
-```bash
-sqlmesh plan           # show column-level diff
-sqlmesh apply          # execute
-sqlmesh plan dev       # apply to virtual environment
-sqlmesh diff prod dev  # compare environments
-```
-
-| Setting | Value |
-|---|---|
-| Engine | DuckDB (native) |
-| Virtual Environments | Test changes without duplicating data |
-| Column-Level Lineage | Auto-detected from SQL |
-| Change Categorization | Breaking vs forward-only |
-| Migration from dbt | `sqlmesh init --dbt` |
-| Scheduler | Built-in cron, or driven from Dagster |
-| Audits | Inline model checks, run on plan/apply |
-
----
-
-## 5. Orchestration — Dagster
-
-Asset-based orchestrator. Each dlt source and SQLMesh model surfaces as a data asset with dependencies, freshness policies, and materialization history. `dagster-dlt` is maintained by Dagster Labs; `dagster-sqlmesh` is community-maintained.
-
-For a single pipeline, SQLMesh's built-in scheduler suffices. Dagster earns its place with multiple sources on different schedules, cross-system dependencies (dlt → SQLMesh → Cube refresh), per-asset freshness SLAs, or event triggers (S3 events, webhooks).
-
-```python
-from dagster_dlt import DagsterDltResource, dlt_assets
-from dagster_sqlmesh import sqlmesh_assets
-
-@dlt_assets(
-    dlt_source=my_api(),
-    dlt_pipeline=pipeline,
-    name="raw_data",
-)
-def raw_assets(context, dlt: DagsterDltResource):
-    yield from dlt.run(context=context)
-
-@sqlmesh_assets(config=sqlmesh_config)
-def transform_assets(context): ...
-```
-
-| Setting | Value |
-|---|---|
-| Deployment | Dagster Cloud or self-hosted |
-| Integrations | `dagster-dlt`, `dagster-sqlmesh` |
-| Freshness Policies | Per-asset SLAs |
-| Auto-Materialization | Trigger downstream on upstream refresh |
-| Event Triggers | S3 events, webhooks |
-
----
-
-## 6. Data Quality — SQLMesh Audits + Soda
-
-Two layers. SQLMesh audits are declared on models and block `apply` on failure — catching structural violations (nulls, duplicates, out-of-range) before bad data ships. Soda runs as a separate observability layer: monitors freshness, row-count anomalies, and schema drift; emits alerts rather than blocking.
-
-```sql
-MODEL (
-  name marts.fct_revenue,
-  audits (
-    not_null(columns=[order_id, revenue, order_date]),
-    unique_values(columns=[order_id]),
-    accepted_range(column=revenue, min_v=0, max_v=1000000),
-  ),
-);
-```
-
-```yaml
-# soda/checks.yml
-checks for raw.orders:
-  - freshness(updated_at) < 6h
-  - row_count > 0
-  - anomaly detection for row_count   # requires Soda Cloud
-  - schema:
-      fail:
-        when forbidden column present: [ssn, credit_card]
-
-checks for marts.fct_revenue:
-  - anomaly detection for avg(revenue)   # requires Soda Cloud
-  - duplicate_count(order_id) = 0
-  - failed rows:
-      fail condition: revenue < 0
-```
-
-| Setting | Value |
-|---|---|
-| SQLMesh Audits | Blocking — run on plan/apply |
-| Soda Core | Open source (`pip install soda-core-duckdb`) |
-| Soda Cloud | Paid — dashboards, anomaly detection, alerts |
-| Integration | Dagster sensor triggers Soda after each run |
-
----
-
-## 7. Semantic Layer — Cube.dev
-
-Defines business metrics once — measures, dimensions, joins — exposed via REST, GraphQL, and SQL APIs. Pre-aggregations (scheduled materialized rollups) serve most queries from cache without touching DuckDB. Load-bearing for LLM consumers: a constrained semantic API prevents the model from fabricating metric definitions or writing invalid SQL.
-
-```javascript
-// cube/schema/Revenue.js
-// `lake` is the DuckLake catalog attached in Cube's DuckDB driver config
-cube('Revenue', {
-  sql_table: 'lake.marts.fct_revenue',
-
-  measures: {
-    total_revenue: { type: 'sum', sql: 'revenue', format: 'currency' },
-    order_count: { type: 'count' },
-    avg_order_value: {
-      type: 'number',
-      sql: `${total_revenue} / NULLIF(${order_count}, 0)`,
-    },
-  },
-
-  dimensions: {
-    order_date: { type: 'time', sql: 'order_date' },
-    customer_segment: { type: 'string', sql: 'customer_segment' },
-  },
-});
-```
-
-Pre-aggregations are declared in the same schema with a refresh interval. Cube materializes them to **Cube Store** (Parquet on blob storage like S3) and routes matching queries automatically.
-
-| Setting | Value |
-|---|---|
-| Data Source | DuckDB via DuckLake |
-| Caching | In-memory + pre-aggregations |
-| APIs | REST, GraphQL, SQL |
-| Deployment | Cube Cloud or self-hosted |
-| Auth | JWT with role-based access control |
-
----
-
-## 8. Consumers
-
-Primary: LLM agents via Cube's API. Secondary: BI dashboards, notebooks for ad-hoc analysis, reverse ETL for operational use cases.
-
-| Consumer | Interface |
-|---|---|
-| LLM agents | Cube REST/SQL API |
-| BI dashboards | Evidence.dev (code-first) or Preset |
-| Ad-hoc analysis | DuckDB CLI, Jupyter |
-| Data science | Polars on DuckDB |
-| Reverse ETL | Census, Hightouch |
-| Alerting | Soda + Cube thresholds → Slack/PagerDuty |
-
----
-
-## Monthly Cost Estimate
-
-| Service | Cost | Notes |
+| Item | Cost | Notes |
 |---|---|---|
-| S3 storage | ~$23/TB/month | Parquet data only |
-| RDS PostgreSQL | ~$15/month | DuckLake catalog (db.t4g.micro), per env |
-| dlt | Free | Open source |
-| SQLMesh | Free | Open source (Tobiko Cloud is paid) |
-| Dagster | Free / $$$ | OSS or Dagster Cloud |
-| Cube.dev | Free / $$$ | OSS or Cube Cloud |
-| Soda Core | Free | OSS (Soda Cloud is paid) |
+| S3 | ~$23 / TB / month | Parquet only; no metadata files. |
+| RDS PostgreSQL | ~$15 / month | DuckLake catalog, `db.t4g.micro`, one instance per account. |
+| ECS / Fargate runner | <$5 / month | One scheduled task per day, sub-hour duration. |
+| dlt, DuckDB, SQLMesh, Marimo, MCP server | Free | Open source. |
 
-Under 5 TB on three AWS envs: ~$60–150/mo floor (S3 + 3× RDS), with Dagster Cloud and Cube Cloud free tiers covering orchestration and the semantic layer.
-
----
-
-## Risks & Mitigations
-
-| Risk | Detail | Mitigation |
-|---|---|---|
-| DuckLake ecosystem breadth | Fewer engine integrations than Iceberg; Spark and Trino connectors still maturing. | Bidirectional Iceberg export; data on S3 remains Parquet. |
-| SQLMesh maturity | Smaller community than dbt; fewer tutorials and Stack Overflow answers. | `sqlmesh init --dbt` imports dbt projects; migration is feasible either direction. |
-| Single-node compute ceiling | DuckDB is a single process; degrades past ~10 TB or tens of concurrent heavy users. | Export DuckLake to Iceberg, run Trino or Spark. |
-| LLM hallucination | Agents fabricate metric names or misinterpret questions. | Cube's semantic layer constrains LLMs to defined measures and dimensions. |
-| Catalog single point of failure | All metadata in one PostgreSQL instance. | RDS multi-AZ, automated backups, point-in-time recovery. |
-
----
-
-## Implementation Order
-
-1. S3 bucket + RDS PostgreSQL — DuckLake foundation.
-2. dlt — one source loaded into DuckLake.
-3. SQLMesh + DuckDB — staging and mart models.
-4. Soda — data quality checks.
-5. Dagster — when scheduling needs exceed SQLMesh's built-in scheduler.
-6. Cube.dev — when a semantic layer is needed.
-7. LLM agents and BI — consumers last.
-
-Each layer is independent; ship value early.
+Under 1 TB on a single account: ~$25–40/month floor. Each additional environment is another account with the same module deployed and another ~$15/month RDS.
