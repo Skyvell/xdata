@@ -1,54 +1,79 @@
-# DuckLake
+# Xdata
 
-Modern data engineering stack: `dlt → DuckLake (S3 + PostgreSQL) → SQLMesh on DuckDB → Cube.dev → LLM agents`. Orchestrated by Dagster, quality enforced by SQLMesh audits and Soda.
+> Modern, lightweight and agent friendly lakehouse.
 
-See [docs/data_stack.md](docs/data_stack.md) for the full reference architecture and [docs/mental_model.md](docs/mental_model.md) for the naming and resource model.
+## Prerequisites
 
-## Stack
+- AWS SSO access to the target account. One AWS account = one environment; today only `dev` exists.
+- `tofu` v1.11.0, `just`, `uv`, Docker, `aws` CLI, `jq` on `PATH`.
+- `AWS_PROFILE` exported and pointing at the target account.
 
-| Layer | Tool |
-|---|---|
-| Ingestion | dlt |
-| Storage | DuckLake (S3 + RDS PostgreSQL) |
-| Compute | DuckDB |
-| Transformation | SQLMesh |
-| Orchestration | Dagster |
-| Quality | SQLMesh audits + Soda |
-| Semantic layer | Cube.dev |
-| Consumers | LLM agents, BI dashboards |
+## 1. Bootstrap state
 
-## Repo layout
-
-```
-ingestion/      dlt pipelines
-transform/      SQLMesh models
-quality/        Soda checks
-orchestration/  Dagster assets and jobs
-semantic/       Cube.dev schema
-shared/         shared Python utilities
-infra/          OpenTofu infrastructure (modules/app + live/ + config/)
-scripts/        one-shot admin scripts (PEP 723)
-docs/           reference architecture docs
-```
-
-See [docs/monorepo_structure.md](docs/monorepo_structure.md) for workspace wiring.
-
-## Infrastructure
-
-AWS — eu-north-1. One AWS account = one environment. Today: dev account only. Prod account is planned and will deploy the same module unchanged.
-
-**One-time bootstrap** (run from laptop with SSO credentials, once per AWS account):
+One-time per AWS account. Creates the S3 bucket that holds OpenTofu state.
 
 ```bash
-just bootstrap-state eu-north-1 tofu-state-<aws-account-id>
+just bootstrap-state eu-north-1 tofu-state-$(aws sts get-caller-identity --query Account --output text)
 ```
 
-**Deploy infra:**
+## 2. Deploy infrastructure
 
-Merges to `main` that touch `infra/` deploy automatically via GitHub Actions (OIDC, no stored credentials). To preview changes locally first:
+Per-account knobs live in [infra/opentofu/config/dev.tfvars](infra/opentofu/config/dev.tfvars). To run `dlt`/SQLMesh from your laptop in step 4 or 5, add your egress IP to `metadata_allowed_cidrs` so RDS will accept the connection.
 
 ```bash
 just tofu-plan dev
+just tofu-apply dev
 ```
 
-See [docs/opentofu_project_guide.md](docs/opentofu_project_guide.md).
+## 3. Build & push the runner image
+
+The Fargate runner runs `ducklake-runner:latest` from ECR. On every push to `main`, [.github/workflows/_deploy-runner.yml](.github/workflows/_deploy-runner.yml) builds and pushes it. For a first deploy (before the first merge) or an out-of-band rebuild:
+
+```bash
+ACCOUNT=$(aws sts get-caller-identity --query Account --output text)
+aws ecr get-login-password --region eu-north-1 \
+  | docker login --username AWS --password-stdin "$ACCOUNT.dkr.ecr.eu-north-1.amazonaws.com"
+
+docker buildx build --platform linux/amd64 --push \
+  -f infra/docker/Dockerfile \
+  -t "$(tofu -chdir=infra/opentofu/live output -raw runner_repository_url):latest" \
+  .
+```
+
+## 4. Run the pipeline
+
+The runner executes `python -m xdata_ingestion.pipeline && sqlmesh -p transform plan --auto-apply --no-prompts` on a daily EventBridge schedule ([infra/opentofu/live/main.tf](infra/opentofu/live/main.tf)).
+
+To trigger it manually before the next firing, run the task directly on the existing cluster + task definition:
+
+```bash
+aws ecs run-task \
+  --cluster ducklake-runner \
+  --task-definition ducklake-runner \
+  --launch-type FARGATE \
+  --network-configuration "awsvpcConfiguration={subnets=[<subnet-ids>],securityGroups=[<runner-sg>],assignPublicIp=ENABLED}"
+```
+
+Subnet IDs and the runner security group come from the `networking` and `runner` modules — read them with `tofu -chdir=infra/opentofu/live state show ...`.
+
+Or run the ingest locally against the dev catalog and bucket:
+
+```bash
+. ./scripts/load_env.sh
+uv run python -m xdata_ingestion.pipeline
+```
+
+## 5. Query the lake
+
+```bash
+. ./scripts/load_env.sh
+just sqlmesh fetchdf "show all tables"
+just sqlmesh fetchdf "select * from ducklake.raw.coins_markets limit 5"
+```
+
+For ad-hoc DuckDB sessions, `ATTACH 'postgres:dbname=$PGDATABASE host=$PGHOST port=$PGPORT user=$PGUSER sslmode=require' AS ducklake (TYPE ducklake, DATA_PATH '$DUCKLAKE_DATA_PATH')`.
+
+## Further reading
+
+- [docs/data_stack.md](docs/data_stack.md) — reference architecture
+- [CLAUDE.md](CLAUDE.md) — repo conventions
