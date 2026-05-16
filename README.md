@@ -1,79 +1,93 @@
 # Xdata
 
-> Modern, lightweight and agent friendly lakehouse.
+A lightweight, modern and agentfriendly data engineering stack.
 
-## Prerequisites
+## Overview
 
-- AWS SSO access to the target account. One AWS account = one environment; today only `dev` exists.
-- `tofu` v1.11.0, `just`, `uv`, Docker, `aws` CLI, `jq` on `PATH`.
-- `AWS_PROFILE` exported and pointing at the target account.
+Xdata is a lightweight lakehouse built around an agent-friendly access layer. A scheduled AWS job ingests with dlt, lands data in DuckLake (S3 Parquet + RDS Postgres catalog), and transforms it with SQLMesh on DuckDB. An MCP server fronts the lake so every client — chat agents, notebooks, reports — attaches to the same semantic layer rather than the database directly. One AWS account = one environment; only `dev` exists today, and prod will deploy the same modules unchanged.
 
-## 1. Bootstrap state
+## Architecture
 
-One-time per AWS account. Creates the S3 bucket that holds OpenTofu state.
-
-```bash
-just bootstrap-state eu-north-1 tofu-state-$(aws sts get-caller-identity --query Account --output text)
+```
+                ┌──────────────────────────────────────┐
+                │      External APIs · files · DBs     │
+                └──────────────────┬───────────────────┘
+                                   │
+                                   ▼
+  ┌───────────────────────────────────────────────────────────────────┐
+  │  Pipeline · scheduled by EventBridge → ECS Fargate                │
+  │                                                                   │
+  │      ┌─────────┐                         ┌────────────────────┐   │
+  │      │   dlt   │                         │      SQLMesh       │   │
+  │      │  ingest │                         │ transform + audits │   │
+  │      └─────────┘                         └────────────────────┘   │
+  └────────────────────────────────┬──────────────────────────────────┘
+                                   │ writes raw + marts
+                                   ▼
+                ┌──────────────────────────────────────┐
+                │              DuckLake                │
+                │     S3 Parquet · Postgres catalog    │
+                └──────────────────┬───────────────────┘
+                                   │ queried via
+                                   ▼
+                ┌──────────────────────────────────────┐
+                │         DuckDB · query engine        │
+                └──────────────────┬───────────────────┘
+                                   │
+                                   ▼
+                ┌──────────────────────────────────────┐
+                │             MCP server               │
+                └──────┬───────────────┬───────────┬───┘
+                       │               │           │
+                       ▼               ▼           ▼
+              ┌────────────────┐ ┌───────────┐ ┌──────────────────┐
+              │ Claude Desktop │ │  Marimo   │ │     Evidence     │
+              │ chat — primary │ │ notebooks │ │ static reports   │
+              │                │ │           │ │    (future)      │
+              └────────────────┘ └───────────┘ └──────────────────┘
 ```
 
-## 2. Deploy infrastructure
+## Repository layout
 
-Per-account knobs live in [infra/opentofu/config/dev.tfvars](infra/opentofu/config/dev.tfvars). To run `dlt`/SQLMesh from your laptop in step 4 or 5, add your egress IP to `metadata_allowed_cidrs` so RDS will accept the connection.
-
-```bash
-just tofu-plan dev
-just tofu-apply dev
+```
+.
+├── ingestion/        dlt pipelines (uv workspace: xdata-ingestion)
+├── transform/        SQLMesh project (uv workspace: xdata-transform)
+├── infra/
+│   ├── opentofu/     modules, live/ root, per-account config/
+│   └── docker/       runner image
+├── migrations/       one-shot SQL migrations for the catalog DB
+├── scripts/          admin scripts (bootstrap_state.sh, load_env.sh)
+├── docs/             reference architecture
+├── justfile          task runner entry points
+└── CLAUDE.md         repo conventions for Claude Code
 ```
 
-## 3. Build & push the runner image
+## Pre-requisites
 
-The Fargate runner runs `ducklake-runner:latest` from ECR. On every push to `main`, [.github/workflows/_deploy-runner.yml](.github/workflows/_deploy-runner.yml) builds and pushes it. For a first deploy (before the first merge) or an out-of-band rebuild:
+- `tofu` v1.11.0
+- `just`
+- `uv`
+- Docker
+- `aws` CLI
+- `jq`
 
-```bash
-ACCOUNT=$(aws sts get-caller-identity --query Account --output text)
-aws ecr get-login-password --region eu-north-1 \
-  | docker login --username AWS --password-stdin "$ACCOUNT.dkr.ecr.eu-north-1.amazonaws.com"
+## Infrastructure
 
-docker buildx build --platform linux/amd64 --push \
-  -f infra/docker/Dockerfile \
-  -t "$(tofu -chdir=infra/opentofu/live output -raw runner_repository_url):latest" \
-  .
-```
-
-## 4. Run the pipeline
-
-The runner executes `python -m xdata_ingestion.pipeline && sqlmesh -p transform plan --auto-apply --no-prompts` on a daily EventBridge schedule ([infra/opentofu/live/main.tf](infra/opentofu/live/main.tf)).
-
-To trigger it manually before the next firing, run the task directly on the existing cluster + task definition:
+One-time per AWS account — creates the S3 bucket that holds OpenTofu state:
 
 ```bash
-aws ecs run-task \
-  --cluster ducklake-runner \
-  --task-definition ducklake-runner \
-  --launch-type FARGATE \
-  --network-configuration "awsvpcConfiguration={subnets=[<subnet-ids>],securityGroups=[<runner-sg>],assignPublicIp=ENABLED}"
+just bootstrap-state <region> tofu-state-<aws-account-id>
 ```
 
-Subnet IDs and the runner security group come from the `networking` and `runner` modules — read them with `tofu -chdir=infra/opentofu/live state show ...`.
+## Local development
 
-Or run the ingest locally against the dev catalog and bucket:
 
-```bash
-. ./scripts/load_env.sh
-uv run python -m xdata_ingestion.pipeline
-```
+## Deployment
 
-## 5. Query the lake
 
-```bash
-. ./scripts/load_env.sh
-just sqlmesh fetchdf "show all tables"
-just sqlmesh fetchdf "select * from ducklake.raw.coins_markets limit 5"
-```
+## Documentation
 
-For ad-hoc DuckDB sessions, `ATTACH 'postgres:dbname=$PGDATABASE host=$PGHOST port=$PGPORT user=$PGUSER sslmode=require' AS ducklake (TYPE ducklake, DATA_PATH '$DUCKLAKE_DATA_PATH')`.
-
-## Further reading
-
-- [docs/data_stack.md](docs/data_stack.md) — reference architecture
-- [CLAUDE.md](CLAUDE.md) — repo conventions
+Link tree only — don't duplicate content.
+- `docs/data_stack.md` — reference architecture
+- `CLAUDE.md` — repo conventions
