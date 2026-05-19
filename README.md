@@ -53,6 +53,9 @@ Xdata is a lightweight lakehouse built around an agent-friendly access layer. A 
 .
 ├── ingestion/        dlt pipelines (uv workspace: xdata-ingestion)
 ├── transform/        SQLMesh project (uv workspace: xdata-transform)
+├── mcp/              FastMCP server exposing read-only mart query tools (uv workspace: xdata-mcp)
+├── dashboards/       Marimo dashboards over the DuckLake (uv workspace: xdata-dashboards)
+├── shared/           cross-workspace helpers — DuckLake auth, JSON serialization (uv workspace: xdata-shared)
 ├── infra/
 │   ├── opentofu/     modules, live/ root, per-account config/
 │   └── docker/       runner image
