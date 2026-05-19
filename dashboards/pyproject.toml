@@ -1,0 +1,19 @@
+[project]
+name = "xdata-dashboards"
+version = "0.0.0"
+description = "Marimo dashboards over the xdata DuckLake."
+requires-python = ">=3.14"
+dependencies = [
+    "marimo>=0.10",
+    "duckdb>=1.1",
+    "altair>=5.4",
+    "pandas>=2.2",
+    "pyarrow>=18",
+    "xdata-shared",
+]
+
+[tool.uv]
+package = false
+
+[tool.uv.sources]
+xdata-shared = { workspace = true }

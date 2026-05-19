@@ -1,2 +1,2 @@
 [tool.uv.workspace]
-members = ["ingestion", "transform"]
+members = ["ingestion", "transform", "dashboards", "mcp", "shared"]
