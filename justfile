@@ -34,3 +34,17 @@ patch-sqlmesh:
 # Usage: just sqlmesh plan dev --auto-apply
 @sqlmesh *args:
     . ./scripts/load_env.sh && cd transform && set -x && uv run sqlmesh "$@"
+
+# Edit a Marimo dashboard (live ATTACH to AWS DuckLake; http://localhost:2718).
+# Usage: just dashboard top_coins
+dashboard name:
+    . ./scripts/load_env.sh && cd dashboards && uv run marimo edit {{name}}.py
+
+# Serve a Marimo dashboard read-only (app mode; http://localhost:2718).
+# Usage: just dashboard-run top_coins
+dashboard-run name:
+    . ./scripts/load_env.sh && cd dashboards && uv run marimo run {{name}}.py
+
+# Run the MCP server (stdio) that exposes DuckLake mart query tools.
+mcp-serve:
+    . ./scripts/load_env.sh && cd mcp && uv run python -m xdata_mcp

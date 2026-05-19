@@ -12,6 +12,9 @@ One AWS account = one environment. Today: dev account only. Prod account is plan
 
 - [ingestion/](ingestion/) — dlt pipelines (uv workspace member `xdata-ingestion`)
 - [transform/](transform/) — SQLMesh project (uv workspace member `xdata-transform`)
+- [dashboards/](dashboards/) — Marimo dashboards (uv workspace member `xdata-dashboards`); live-queries DuckLake via `xdata_shared.ducklake.DuckLake`
+- [mcp/](mcp/) — FastMCP server (`xdata-mcp`) exposing read-only mart query tools over stdio; tool categories live under `mcp/xdata_mcp/tools/` and are mounted into the root server in `server.py`
+- [shared/](shared/) — cross-workspace helpers (`xdata-shared`): `ducklake.DuckLake` (catalog config + connect) and `serialization.jsonable` (DuckDB-row → JSON conversion)
 - [infra/opentofu/](infra/opentofu/) — modules, `live/` deployment root, per-account `config/`
 - [infra/docker/](infra/docker/) — runner image (Python 3.14 + uv, builds both workspaces)
 - [migrations/](migrations/) — one-shot SQL migrations applied manually to the catalog DB
@@ -31,6 +34,11 @@ just bootstrap-state <region> <bucket>  # one-time state bucket setup
 
 just sqlmesh <args...>     # sources scripts/load_env.sh then runs sqlmesh from transform/
 just patch-sqlmesh         # re-applies the Python 3.14 argparse fix after `uv sync`
+
+just dashboard <name>      # marimo edit (e.g. `just dashboard top_coins`)
+just dashboard-run <name>  # marimo run, read-only app mode
+
+just mcp-serve             # stdio MCP server; tools are namespaced (e.g. marts_list_marts, marts_describe_mart, marts_query_marts)
 ```
 
 `scripts/load_env.sh` must be sourced (not executed) and reads the RDS endpoint + master secret from the active AWS profile. The Fargate runner gets the same env vars injected by the `runner` module.
