@@ -5,11 +5,6 @@ locals {
   }
 }
 
-moved {
-  from = module.scheduled_runner
-  to   = module.runner
-}
-
 module "networking" {
   source = "../modules/networking"
 
